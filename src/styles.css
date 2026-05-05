@@ -1006,6 +1006,43 @@ textarea {
   gap: 12px;
 }
 
+.packet-heading {
+  align-items: center;
+}
+
+.packet-heading div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.packet-download-button {
+  min-height: 32px;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.packet-notice {
+  border: 1px solid #d7dde3;
+  border-radius: 6px;
+  padding: 9px 10px;
+  color: #405064;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.packet-notice-included {
+  border-color: #bad9c5;
+  background: #f0faf5;
+  color: #1d6f4b;
+}
+
+.packet-notice-redacted {
+  border-color: #dfc58c;
+  background: #fff8df;
+  color: #6d4a00;
+}
+
 .packet-summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1029,6 +1066,11 @@ textarea {
   color: #142536;
   font-size: 15px;
   text-transform: none;
+}
+
+.packet-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .payment-packet table {

@@ -377,11 +377,27 @@ export function GraftPanel({
 
       {paymentPacket && (
         <section className="panel-section">
-          <div className="section-heading">
-            <h3>Payment packet</h3>
-            <span>{paymentPacket.bankDetailsStatus}</span>
+          <div className="section-heading packet-heading">
+            <div>
+              <h3>Payment packet</h3>
+              <span>{packetStatusLabel(paymentPacket)}</span>
+            </div>
+            {paymentPacket.bankDetailsStatus === "included" && (
+              <button
+                type="button"
+                className="secondary-button packet-download-button"
+                onClick={() => downloadPaymentPacketCsv(paymentPacket)}
+              >
+                Download CSV
+              </button>
+            )}
           </div>
           <div className="payment-packet">
+            <div className={`packet-notice packet-notice-${paymentPacket.bankDetailsStatus}`}>
+              {paymentPacket.bankDetailsStatus === "included"
+                ? "Approval allowed bank details for this packet. The CSV includes bank/account data."
+                : "Approval was denied. Bank details are redacted and no bank-data export is available."}
+            </div>
             <div className="packet-summary-grid">
               <span>
                 <strong>{paymentPacket.invoices.length}</strong>
@@ -397,29 +413,31 @@ export function GraftPanel({
               </span>
               <span>
                 <strong>{paymentPacket.needsApproval.length}</strong>
-                needs approval
+                review items
               </span>
             </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Invoice</th>
-                  <th>Vendor</th>
-                  <th>Amount</th>
-                  <th>Bank details</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paymentPacket.invoices.map((invoice) => (
-                  <tr key={invoice.invoiceId}>
-                    <td>{invoice.invoiceId}</td>
-                    <td>{invoice.vendorName}</td>
-                    <td>EUR {invoice.amount.toLocaleString("en-US")}</td>
-                    <td>{invoice.bankDetails}</td>
+            <div className="packet-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Invoice</th>
+                    <th>Vendor</th>
+                    <th>Amount</th>
+                    <th>Bank details</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {paymentPacket.invoices.map((invoice) => (
+                    <tr key={invoice.invoiceId}>
+                      <td>{invoice.invoiceId}</td>
+                      <td>{invoice.vendorName}</td>
+                      <td>EUR {invoice.amount.toLocaleString("en-US")}</td>
+                      <td>{invoice.bankDetails}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       )}
@@ -487,6 +505,37 @@ function runStatusLabel(
   }
 
   return `${eventCount} events`;
+}
+
+function packetStatusLabel(packet: PaymentPacket): string {
+  return packet.bankDetailsStatus === "included" ? "bank details included" : "bank details redacted";
+}
+
+function downloadPaymentPacketCsv(packet: PaymentPacket): void {
+  const rows = [
+    ["invoice_id", "vendor_name", "amount_eur", "due_date", "risk_flag", "bank_details"],
+    ...packet.invoices.map((invoice) => [
+      invoice.invoiceId,
+      invoice.vendorName,
+      invoice.amount,
+      invoice.dueDate,
+      invoice.riskFlag,
+      invoice.bankDetails,
+    ]),
+  ];
+  const csv = rows.map((row) => row.map(formatCsvCell).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "vendor-payment-packet.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function formatCsvCell(value: string | number): string {
+  const text = String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 function inputTypeForProperty(property: unknown): string {
