@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AuditTimeline } from "./AuditTimeline";
 import { ApprovalCard } from "./ApprovalCard";
 import { SchemaViewer } from "./SchemaViewer";
@@ -8,6 +8,7 @@ import type { AuditEvent } from "../graft/auditLog";
 import type { CompiledToolGroup } from "../graft/agentCompiler";
 import type { ReplayResult, ReplayTrace, ToolSchema } from "../graft/schemaTypes";
 import type { PaymentPacket, VendorAgentEvent } from "../graft/vendorPaymentAgent";
+import type { WorkflowRunInputs, WorkflowTaskPlan } from "../graft/workflowPlanner";
 import { AgentMessageStream } from "./AgentMessageStream";
 
 type PendingApproval = {
@@ -19,8 +20,10 @@ type Props = {
   agentMessages: AgentMessageModel[];
   auditEvents: AuditEvent[];
   command: string;
+  compileActivity: string[];
   compiledToolGroup?: CompiledToolGroup;
   isExtension: boolean;
+  isCompilingWebsite: boolean;
   isLearning: boolean;
   isRunning: boolean;
   pendingApproval?: PendingApproval;
@@ -29,8 +32,10 @@ type Props = {
   replayTrace: ReplayTrace[];
   schemas: ToolSchema[];
   selectedSchema?: ToolSchema;
+  taskPlan: WorkflowTaskPlan;
   toolParams: Record<string, string>;
   vendorAgentEvents: VendorAgentEvent[];
+  workflowInputs: WorkflowRunInputs;
   onAllow: () => void;
   onCommandChange: (value: string) => void;
   onDeny: () => void;
@@ -40,14 +45,17 @@ type Props = {
   onSelectSchema: (schema: ToolSchema) => void;
   onToolParamChange: (name: string, value: string) => void;
   onUsePreset: () => void;
+  onWorkflowInputChange: (inputs: WorkflowRunInputs) => void;
 };
 
 export function GraftPanel({
   agentMessages,
   auditEvents,
   command,
+  compileActivity,
   compiledToolGroup,
   isExtension,
+  isCompilingWebsite,
   isLearning,
   isRunning,
   pendingApproval,
@@ -56,8 +64,10 @@ export function GraftPanel({
   replayTrace,
   schemas,
   selectedSchema,
+  taskPlan,
   toolParams,
   vendorAgentEvents,
+  workflowInputs,
   onAllow,
   onCommandChange,
   onDeny,
@@ -67,8 +77,37 @@ export function GraftPanel({
   onSelectSchema,
   onToolParamChange,
   onUsePreset,
+  onWorkflowInputChange,
 }: Props) {
   const [compiledTab, setCompiledTab] = useState<"workflow" | "tools">("workflow");
+  const [compileActivityOpen, setCompileActivityOpen] = useState(false);
+  const [compileElapsedSeconds, setCompileElapsedSeconds] = useState(0);
+  const showCompiledArea = isCompilingWebsite || compileActivity.length > 0 || Boolean(compiledToolGroup);
+
+  useEffect(() => {
+    if (isCompilingWebsite) {
+      setCompileActivityOpen(true);
+      return;
+    }
+
+    if (compiledToolGroup) {
+      setCompileActivityOpen(false);
+    }
+  }, [isCompilingWebsite, compiledToolGroup]);
+
+  useEffect(() => {
+    if (!isCompilingWebsite) {
+      setCompileElapsedSeconds(0);
+      return;
+    }
+
+    setCompileElapsedSeconds(0);
+    const interval = window.setInterval(() => {
+      setCompileElapsedSeconds((current) => current + 1);
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [isCompilingWebsite]);
 
   return (
     <aside className="graft-panel" aria-label="Graft Guard panel">
@@ -96,7 +135,7 @@ export function GraftPanel({
 
       {!isExtension && <AgentMessageStream messages={agentMessages} />}
 
-      {compiledToolGroup && (
+      {showCompiledArea && (
         <section className="panel-section">
           <div className="section-heading compiled-section-heading">
             <div className="compiled-tabs" role="tablist" aria-label="Compiled output">
@@ -115,68 +154,88 @@ export function GraftPanel({
                 Generated tools
               </button>
             </div>
-            <span>{compiledToolGroup.provider === "agent-api" ? "MiniMax" : "local fallback"}</span>
           </div>
 
           {compiledTab === "workflow" ? (
             <div className="compiled-workflow-card">
-              <strong>{compiledToolGroup.name}</strong>
-              <span>{compiledToolGroup.description}</span>
-              <div className="compiled-workflow-group">
-                <h4>{compiledToolGroup.workflowPlan.length} planned steps</h4>
-                <ol className="compiled-step-list">
-                  {compiledToolGroup.workflowPlan.map((step, index) => (
-                    <li key={`${step.tool}-${index}`}>
-                      <span>{step.tool}</span>
-                      {step.guard && <b>Guard</b>}
-                    </li>
-                  ))}
-                </ol>
-              </div>
+              {compileActivity.length > 0 && (
+                <details
+                  className="compile-activity"
+                  open={compileActivityOpen}
+                  onToggle={(event) => setCompileActivityOpen(event.currentTarget.open)}
+                >
+                  <summary>
+                    <span>{isCompilingWebsite ? "Agent is compiling" : "Agent compile log"}</span>
+                    <small>{compileActivity.length} steps</small>
+                  </summary>
+                  <ol>
+                    {compileActivity.map((event, index) => (
+                      <li key={`${event}-${index}`}>{event}</li>
+                    ))}
+                  </ol>
+                </details>
+              )}
+
+              {isCompilingWebsite && !compiledToolGroup && (
+                <div className="workflow-run-loading compile-loading">
+                  <span className="loading-dot" aria-hidden="true" />
+                  <span>
+                    {compileActivity[compileActivity.length - 1] ?? "Compiling this page into reusable tools."}
+                    {compileElapsedSeconds > 0 ? ` (${compileElapsedSeconds}s)` : ""}
+                  </span>
+                </div>
+              )}
+
+              {compiledToolGroup && (
+                <>
+                  <strong>{compiledToolGroup.name}</strong>
+                  <span>{compiledToolGroup.description}</span>
+                  <div className="compiled-workflow-group">
+                    <h4>{compiledToolGroup.workflowPlan.length} planned steps</h4>
+                    <ol className="compiled-step-list">
+                      {compiledToolGroup.workflowPlan.map((step, index) => (
+                        <li key={`${step.tool}-${index}`}>
+                          <span>{step.tool}</span>
+                          {step.guard && <b>Guard</b>}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : compiledToolGroup ? (
+            <div className="compiled-workflow-card">
+              <ToolLibrarySections
+                guardedToolNames={taskPlan.guardedTools}
+                missingCapabilities={taskPlan.missingCapabilities}
+                reusedToolNames={taskPlan.reusedTools}
+                selectedSchema={selectedSchema}
+                tools={compiledToolGroup.tools}
+                onSelectSchema={onSelectSchema}
+              />
+              {selectedSchema && (
+                <div className="generated-tool-schema">
+                  <div className="section-heading">
+                    <h4>Schema</h4>
+                    <span>MCP-compatible</span>
+                  </div>
+                  <SchemaViewer schema={selectedSchema} />
+                </div>
+              )}
             </div>
           ) : (
             <div className="compiled-workflow-card">
-              <div className="compiled-workflow-group">
-                <h4>{compiledToolGroup.tools.length} typed tools</h4>
-                <div className="generated-tool-list">
-                  {compiledToolGroup.tools.map((tool) => (
-                    <button
-                      type="button"
-                      key={tool.name}
-                      className={selectedSchema?.name === tool.name ? "selected" : ""}
-                      onClick={() => onSelectSchema(tool)}
-                    >
-                      <span>
-                        <strong>{tool.name}</strong>
-                        <small>{tool.description}</small>
-                      </span>
-                      <b>{tool.risk}</b>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="compiled-tool-pills" aria-label="Reusable tool names">
-                {compiledToolGroup.tools.map((tool) => (
-                  <span key={tool.name}>{tool.name}</span>
-                ))}
+              <div className="workflow-run-loading compile-loading">
+                {isCompilingWebsite && <span className="loading-dot" aria-hidden="true" />}
+                <span>Reusable tools will appear here after compile.</span>
               </div>
             </div>
-          )}
-
-          {isExtension && (
-            <button
-              type="button"
-              className="primary-button full-width"
-              onClick={onRun}
-              disabled={isRunning || schemas.length === 0}
-            >
-              {isRunning ? "Running..." : "Run workflow"}
-            </button>
           )}
         </section>
       )}
 
-      {!compiledToolGroup && (
+      {!showCompiledArea && (!isExtension || schemas.length > 0) && (
         <section className="panel-section">
           <div className="section-heading">
             <h3>Compiled tools</h3>
@@ -206,8 +265,96 @@ export function GraftPanel({
         </section>
       )}
 
-      {(isRunning || vendorAgentEvents.length > 0) && compiledToolGroup && (
+      {isExtension && compiledToolGroup && (
         <section className="panel-section">
+          <div className="section-heading">
+            <h3>Task plan</h3>
+            <span>{planStatusLabel(taskPlan)}</span>
+          </div>
+          <div className={`task-plan-card task-plan-${taskPlan.status}`}>
+            <div className="task-plan-summary">
+              <strong>{taskPlan.title}</strong>
+              <span>{taskPlan.summary}</span>
+            </div>
+            <div className="task-plan-metrics">
+              <span>
+                <strong>{taskPlan.reusedTools.length}</strong>
+                reused
+              </span>
+              <span>
+                <strong>{taskPlan.guardedTools.length}</strong>
+                guarded
+              </span>
+              <span>
+                <strong>{taskPlan.missingCapabilities.length}</strong>
+                missing
+              </span>
+            </div>
+            <div className="workflow-inputs">
+              <label>
+                Status
+                <select
+                  value={workflowInputs.status}
+                  onChange={(event) =>
+                    onWorkflowInputChange({ ...workflowInputs, status: event.target.value as WorkflowRunInputs["status"] })
+                  }
+                >
+                  <option value="all">All</option>
+                  <option value="overdue">Overdue</option>
+                  <option value="pending">Pending</option>
+                  <option value="paid">Paid</option>
+                </select>
+              </label>
+              <label>
+                Minimum amount
+                <input
+                  type="number"
+                  min="0"
+                  step="100"
+                  value={workflowInputs.minAmount}
+                  onChange={(event) =>
+                    onWorkflowInputChange({
+                      ...workflowInputs,
+                      minAmount: Math.max(0, Number(event.target.value) || 0),
+                    })
+                  }
+                />
+              </label>
+              <label>
+                Vendor risk
+                <select
+                  value={workflowInputs.riskFilter}
+                  onChange={(event) =>
+                    onWorkflowInputChange({
+                      ...workflowInputs,
+                      riskFilter: event.target.value as WorkflowRunInputs["riskFilter"],
+                    })
+                  }
+                >
+                  <option value="all">All vendors</option>
+                  <option value="none">Clear only</option>
+                  <option value="review">Review only</option>
+                  <option value="blocked">Blocked only</option>
+                  <option value="flagged">Flagged only</option>
+                </select>
+              </label>
+            </div>
+            {taskPlan.missingCapabilities.length > 0 && (
+              <div className="missing-capabilities">
+                <strong>Missing capability</strong>
+                <div>
+                  {taskPlan.missingCapabilities.map((capability) => (
+                    <span key={capability}>{capability}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {(isRunning || vendorAgentEvents.length > 0) && compiledToolGroup && (
+        <section className={`panel-section ${pendingApproval ? "workflow-paused-section" : ""}`}>
           <div className="section-heading">
             <h3>Workflow run</h3>
             <span>{runStatusLabel(isRunning, pendingApproval, vendorAgentEvents.length)}</span>
@@ -221,7 +368,7 @@ export function GraftPanel({
           {vendorAgentEvents.length > 0 && (
             <ol className="agent-workflow-list">
               {vendorAgentEvents.map((event, index) => (
-                <li key={`${event.type}-${index}`}>
+                <li key={`${event.type}-${index}`} className={workflowEventClass(event, pendingApproval)}>
                   <strong>{eventLabel(event.type)}</strong>
                   <span>{event.message}</span>
                 </li>
@@ -231,7 +378,7 @@ export function GraftPanel({
         </section>
       )}
 
-      {(!isExtension || (selectedSchema && !compiledToolGroup)) && (
+      {(!isExtension || (selectedSchema && !showCompiledArea)) && (
         <section className="panel-section">
           <div className="section-heading">
             <h3>Schema</h3>
@@ -241,7 +388,7 @@ export function GraftPanel({
         </section>
       )}
 
-      {selectedSchema && (!isExtension || !compiledToolGroup) && (
+      {selectedSchema && (!isExtension || !showCompiledArea) && (
         <section className="panel-section">
           <div className="section-heading">
             <h3>Tool inputs</h3>
@@ -303,17 +450,33 @@ export function GraftPanel({
         </section>
       )}
 
-      {pendingApproval && (
+      {pendingApproval && !isExtension && (
         <ApprovalCard schema={pendingApproval.schema} onAllow={onAllow} onDeny={onDeny} />
       )}
 
       {paymentPacket && (
         <section className="panel-section">
-          <div className="section-heading">
-            <h3>Payment packet</h3>
-            <span>{paymentPacket.bankDetailsStatus}</span>
+          <div className="section-heading packet-heading">
+            <div>
+              <h3>Payment packet</h3>
+              <span>{packetStatusLabel(paymentPacket)}</span>
+            </div>
+            {paymentPacket.bankDetailsStatus === "included" && (
+              <button
+                type="button"
+                className="secondary-button packet-download-button"
+                onClick={() => downloadPaymentPacketCsv(paymentPacket)}
+              >
+                Download CSV
+              </button>
+            )}
           </div>
           <div className="payment-packet">
+            <div className={`packet-notice packet-notice-${paymentPacket.bankDetailsStatus}`}>
+              {paymentPacket.bankDetailsStatus === "included"
+                ? "Approval allowed bank details for this packet. The CSV includes bank/account data."
+                : "Approval was denied. Bank details are redacted and no bank-data export is available."}
+            </div>
             <div className="packet-summary-grid">
               <span>
                 <strong>{paymentPacket.invoices.length}</strong>
@@ -329,29 +492,31 @@ export function GraftPanel({
               </span>
               <span>
                 <strong>{paymentPacket.needsApproval.length}</strong>
-                needs approval
+                review items
               </span>
             </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Invoice</th>
-                  <th>Vendor</th>
-                  <th>Amount</th>
-                  <th>Bank details</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paymentPacket.invoices.map((invoice) => (
-                  <tr key={invoice.invoiceId}>
-                    <td>{invoice.invoiceId}</td>
-                    <td>{invoice.vendorName}</td>
-                    <td>EUR {invoice.amount.toLocaleString("en-US")}</td>
-                    <td>{invoice.bankDetails}</td>
+            <div className="packet-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Invoice</th>
+                    <th>Vendor</th>
+                    <th>Amount</th>
+                    <th>Bank details</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {paymentPacket.invoices.map((invoice) => (
+                    <tr key={invoice.invoiceId}>
+                      <td>{invoice.invoiceId}</td>
+                      <td>{invoice.vendorName}</td>
+                      <td>EUR {invoice.amount.toLocaleString("en-US")}</td>
+                      <td>{invoice.bankDetails}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       )}
@@ -395,6 +560,99 @@ export function GraftPanel({
   );
 }
 
+function ToolLibrarySections({
+  guardedToolNames,
+  missingCapabilities,
+  reusedToolNames,
+  selectedSchema,
+  tools,
+  onSelectSchema,
+}: {
+  guardedToolNames: string[];
+  missingCapabilities: string[];
+  reusedToolNames: string[];
+  selectedSchema?: ToolSchema;
+  tools: ToolSchema[];
+  onSelectSchema: (schema: ToolSchema) => void;
+}) {
+  const reused = tools.filter((tool) => reusedToolNames.includes(tool.name));
+  const generated = tools.filter((tool) => !reusedToolNames.includes(tool.name));
+
+  return (
+    <div className="tool-library-sections">
+      <ToolLibrarySection
+        label="Reused saved tools"
+        tools={reused}
+        selectedSchema={selectedSchema}
+        guardedToolNames={guardedToolNames}
+        onSelectSchema={onSelectSchema}
+      />
+      <ToolLibrarySection
+        label="New or updated tools"
+        tools={generated}
+        selectedSchema={selectedSchema}
+        guardedToolNames={guardedToolNames}
+        onSelectSchema={onSelectSchema}
+      />
+      {missingCapabilities.length > 0 && (
+        <div className="tool-library-section tool-library-missing">
+          <h4>Missing capabilities</h4>
+          <div>
+            {missingCapabilities.map((capability) => (
+              <span key={capability}>{capability}</span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolLibrarySection({
+  guardedToolNames,
+  label,
+  selectedSchema,
+  tools,
+  onSelectSchema,
+}: {
+  guardedToolNames: string[];
+  label: string;
+  selectedSchema?: ToolSchema;
+  tools: ToolSchema[];
+  onSelectSchema: (schema: ToolSchema) => void;
+}) {
+  if (tools.length === 0) {
+    return (
+      <div className="tool-library-section">
+        <h4>{label}</h4>
+        <div className="tool-library-empty">None</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="tool-library-section">
+      <h4>{label}</h4>
+      <div className="generated-tool-list">
+        {tools.map((tool) => (
+          <button
+            type="button"
+            key={tool.name}
+            className={selectedSchema?.name === tool.name ? "selected" : ""}
+            onClick={() => onSelectSchema(tool)}
+          >
+            <span>
+              <strong>{tool.name}</strong>
+              <small>{tool.description}</small>
+            </span>
+            <b>{guardedToolNames.includes(tool.name) ? "guarded" : tool.risk}</b>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function eventLabel(type: VendorAgentEvent["type"]): string {
   const labels: Record<VendorAgentEvent["type"], string> = {
     plan_selected: "Plan",
@@ -404,6 +662,16 @@ function eventLabel(type: VendorAgentEvent["type"]): string {
     packet_generated: "Packet",
   };
   return labels[type];
+}
+
+function workflowEventClass(event: VendorAgentEvent, pendingApproval?: PendingApproval): string {
+  if (event.type !== "guard_required") {
+    return `agent-event-${event.type}`;
+  }
+
+  return pendingApproval?.schema.name === event.tool
+    ? "agent-event-guard_required agent-event-guard-active"
+    : "agent-event-guard_required agent-event-guard-resolved";
 }
 
 function runStatusLabel(
@@ -420,6 +688,49 @@ function runStatusLabel(
   }
 
   return `${eventCount} events`;
+}
+
+function planStatusLabel(plan: WorkflowTaskPlan): string {
+  if (plan.status === "ready") {
+    return "ready";
+  }
+
+  if (plan.status === "partial") {
+    return "partial reuse";
+  }
+
+  return "needs tools";
+}
+
+function packetStatusLabel(packet: PaymentPacket): string {
+  return packet.bankDetailsStatus === "included" ? "bank details included" : "bank details redacted";
+}
+
+function downloadPaymentPacketCsv(packet: PaymentPacket): void {
+  const rows = [
+    ["invoice_id", "vendor_name", "amount_eur", "due_date", "risk_flag", "bank_details"],
+    ...packet.invoices.map((invoice) => [
+      invoice.invoiceId,
+      invoice.vendorName,
+      invoice.amount,
+      invoice.dueDate,
+      invoice.riskFlag,
+      invoice.bankDetails,
+    ]),
+  ];
+  const csv = rows.map((row) => row.map(formatCsvCell).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "vendor-payment-packet.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function formatCsvCell(value: string | number): string {
+  const text = String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 function inputTypeForProperty(property: unknown): string {

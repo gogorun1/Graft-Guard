@@ -17,7 +17,7 @@ import {
 import { createAuditEvent, type AuditEvent } from "./graft/auditLog";
 import {
   compileCapturedWorkflow,
-  loadPageSchemas,
+  replacePageSchemas,
   savePageSchema,
   type CandidateTool,
 } from "./graft/capturedWorkflowCompiler";
@@ -37,11 +37,20 @@ import {
   type PaymentPacket,
   type VendorAgentEvent,
 } from "./graft/vendorPaymentAgent";
+import {
+  defaultWorkflowRunInputs,
+  formatVendorPaymentPrompt,
+  inferWorkflowRunInputs,
+  planWorkflowTask,
+  type WorkflowRunInputs,
+  type WorkflowTaskPlan,
+} from "./graft/workflowPlanner";
 import { GraftPanel } from "./ui/GraftPanel";
 import { ExtensionInspector } from "./ui/ExtensionInspector";
 
 const presetCommand = "Prepare a vendor payment packet for all overdue invoices above EUR 5,000, but do not export bank details without approval.";
-const defaultWebsiteIntent = "Create a tool to submit this form";
+const defaultWebsiteIntent = presetCommand;
+const fakeCompileDelayMs = 2000;
 const simulatedRunDelayMs = 1200;
 
 type PendingApproval = {
@@ -50,12 +59,17 @@ type PendingApproval = {
 };
 
 export default function App() {
-  const [schemas, setSchemas] = useState<ToolSchema[]>(() => loadCachedSchemas());
-  const [selectedToolName, setSelectedToolName] = useState("queryOrders");
+  const isExtension = isExtensionRuntime();
+  const [schemas, setSchemas] = useState<ToolSchema[]>(() => (isExtension ? [] : loadCachedSchemas()));
+  const [selectedToolName, setSelectedToolName] = useState(() => (isExtension ? "" : "queryOrders"));
   const [command, setCommand] = useState(presetCommand);
   const [websiteIntent, setWebsiteIntent] = useState(defaultWebsiteIntent);
+  const [workflowInputs, setWorkflowInputs] = useState<WorkflowRunInputs>(() =>
+    inferWorkflowRunInputs(presetCommand, defaultWorkflowRunInputs()),
+  );
   const [toolParams, setToolParams] = useState<Record<string, string>>({});
   const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([]);
+  const [compileActivity, setCompileActivity] = useState<string[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval>();
   const [replayTrace, setReplayTrace] = useState<ReplayTrace[]>([]);
@@ -74,7 +88,6 @@ export default function App() {
   const [candidateTool, setCandidateTool] = useState<CandidateTool>();
   const [isCapturing, setIsCapturing] = useState(false);
   const [inspectionError, setInspectionError] = useState<string>();
-  const isExtension = isExtensionRuntime();
 
   const selectedSchema = useMemo(
     () =>
@@ -83,6 +96,11 @@ export default function App() {
       schemas[0] ??
       compiledToolGroup?.tools[0],
     [compiledToolGroup, schemas, selectedToolName],
+  );
+
+  const taskPlan = useMemo(
+    () => planWorkflowTask(command, schemas, workflowInputs),
+    [command, schemas, workflowInputs],
   );
 
   useEffect(() => {
@@ -115,9 +133,6 @@ export default function App() {
         }
 
         setPageSummary(summary);
-        const pageSchemas = loadPageSchemas(summary);
-        setSchemas(pageSchemas);
-        setSelectedToolName(pageSchemas[0]?.name ?? "queryOrders");
         addAgentMessage({ type: "page_observed", summary });
       } catch (error) {
         if (cancelled) {
@@ -139,6 +154,10 @@ export default function App() {
 
   function addAudit(event: Omit<AuditEvent, "id" | "timestamp">) {
     setAuditEvents((current) => [createAuditEvent(event), ...current]);
+  }
+
+  function addCompileActivity(message: string) {
+    setCompileActivity((current) => [...current, message]);
   }
 
   function addAgentMessage(event: AgentNarratorInput) {
@@ -219,9 +238,6 @@ export default function App() {
     try {
       const summary = await collectActivePageSummary();
       setPageSummary(summary);
-      const pageSchemas = loadPageSchemas(summary);
-      setSchemas(pageSchemas);
-      setSelectedToolName(pageSchemas[0]?.name ?? "queryOrders");
       addAgentMessage({ type: "page_observed", summary });
       addAudit({
         type: "learned_tool",
@@ -241,24 +257,66 @@ export default function App() {
     }
   }
 
-  async function handleLearnWebsite() {
+  async function handleLearnWebsite(options: { mode?: "full" | "missing" } = {}) {
+    const compileMode = options.mode ?? "full";
+    const isMissingCompile = compileMode === "missing";
     setIsLearningWebsite(true);
     setInspectionError(undefined);
     setCandidateTool(undefined);
-    setCompiledToolGroup(undefined);
+    if (!isMissingCompile) {
+      setCompiledToolGroup(undefined);
+    }
+    setCompileActivity([
+      isMissingCompile
+        ? `Planning delta compile against ${schemas.length} saved tools`
+        : "Inspecting the active page",
+    ]);
 
     try {
       const summary = await collectActivePageSummary();
       setPageSummary(summary);
       addAgentMessage({ type: "compile_started", summary });
       const stopCompileStages = startCompileStageMessages(summary, addAgentMessage);
+      addCompileActivity(`Observed ${summary.inputs.length} inputs, ${summary.buttons.length} buttons, and ${summary.tables.length} tables`);
+      if (isMissingCompile) {
+        addCompileActivity(`Reusing ${taskPlan.reusedTools.length} existing tools`);
+        addCompileActivity(`Compiling ${taskPlan.missingCapabilities.length} missing capabilities`);
+      } else {
+        addCompileActivity("Preparing AgentDraft request from prompt and page summary");
+      }
+      await sleep(fakeCompileDelayMs);
+      addCompileActivity("Calling Agent Compiler and waiting for semantic draft");
 
       const effectiveIntent = websiteIntent.trim() || defaultWebsiteIntent;
       setCommand(effectiveIntent);
-      const group = await compileToolGroupWithAgent({ prompt: effectiveIntent, pageSummary: summary }).finally(stopCompileStages);
-      setCompiledToolGroup(group);
-      setSchemas([]);
-      setSelectedToolName(group.tools[0]?.name ?? "generatedTool");
+      setWorkflowInputs(inferWorkflowRunInputs(effectiveIntent, workflowInputs));
+      const group = await compileToolGroupWithAgent({
+        prompt: effectiveIntent,
+        pageSummary: summary,
+        existingTools: isMissingCompile ? schemas : [],
+        missingCapabilities: isMissingCompile ? taskPlan.missingCapabilities : [],
+      }).finally(stopCompileStages);
+      addCompileActivity(
+        group.provider === "agent-api"
+          ? "Received AgentDraft from MiniMax API"
+          : "Used local compiler fallback",
+      );
+      addCompileActivity(`Normalized draft into ${group.tools.length} reusable tools`);
+      addCompileActivity(`Validated ${group.workflowPlan.length} planned workflow steps`);
+      const savedTools = isMissingCompile ? mergeToolSchemas(schemas, group.tools) : group.tools;
+      replacePageSchemas(summary, savedTools);
+      addCompileActivity(
+        isMissingCompile
+          ? `Cached ${savedTools.length} tools after preserving existing schemas`
+          : "Cached reusable tools for this page",
+      );
+      setCompiledToolGroup({
+        ...group,
+        tools: savedTools,
+        workflowPlan: mergeWorkflowPlan(compiledToolGroup?.workflowPlan ?? [], group.workflowPlan, isMissingCompile),
+      });
+      setSchemas(savedTools);
+      setSelectedToolName(group.tools[0]?.name ?? savedTools[0]?.name ?? "generatedTool");
       addAgentMessage({ type: "compile_group_succeeded", group, summary });
       addAudit({
         type: "learned_tool",
@@ -270,6 +328,7 @@ export default function App() {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Website compile failed";
       setInspectionError(message);
+      addCompileActivity(`Compile failed: ${message}`);
       addAudit({
         type: "replay_failed",
         message,
@@ -370,28 +429,7 @@ export default function App() {
   }
 
   function handleSaveGeneratedSchema() {
-    if (!pageSummary) {
-      return;
-    }
-
-    if (compiledToolGroup) {
-      let saved = loadPageSchemas(pageSummary);
-      for (const tool of compiledToolGroup.tools) {
-        saved = savePageSchema(pageSummary, tool);
-      }
-      setSchemas(saved);
-      setSelectedToolName(compiledToolGroup.tools[0]?.name ?? "generatedTool");
-      addAudit({
-        type: "learned_tool",
-        toolName: compiledToolGroup.name,
-        risk: "read",
-        message: `Saved ${compiledToolGroup.tools.length} compiled tools for ${pageSummary.origin}`,
-        llmCalls: 0,
-      });
-      return;
-    }
-
-    if (!candidateTool) {
+    if (!candidateTool || !pageSummary) {
       return;
     }
 
@@ -408,12 +446,12 @@ export default function App() {
   }
 
   async function handleRun() {
-    if (compiledToolGroup && isVendorPaymentGroup(compiledToolGroup)) {
-      await runVendorPaymentWorkflow();
+    if (compiledToolGroup && taskPlan.missingCapabilities.length > 0) {
+      await handleLearnWebsite({ mode: "missing" });
       return;
     }
 
-    if (isVendorPaymentRequest(command) && !isExtension) {
+    if (isVendorPaymentRequest(command) && (!isExtension || isVendorPaymentGroup(compiledToolGroup))) {
       await runVendorPaymentWorkflow();
       return;
     }
@@ -593,9 +631,9 @@ export default function App() {
 
     try {
       await sleep(simulatedRunDelayMs);
-      const run = compiledToolGroup
-        ? startCompiledVendorPaymentWorkflow(compiledToolGroup, command)
-        : startVendorPaymentWorkflow(command);
+      const run = isVendorPaymentGroup(compiledToolGroup)
+        ? startCompiledVendorPaymentWorkflow(compiledToolGroup, command, workflowInputs)
+        : startVendorPaymentWorkflow(command, workflowInputs);
       setVendorAgentEvents(run.events);
 
       for (const event of run.events) {
@@ -727,7 +765,6 @@ export default function App() {
       <div className="extension-panel-stack">
         <ExtensionInspector
           advancedOpen={advancedOpen}
-          agentMessages={agentMessages}
           capturedSteps={capturedSteps}
           candidateSchema={candidateTool?.schema}
           candidateWarnings={candidateTool?.warnings ?? []}
@@ -739,11 +776,15 @@ export default function App() {
           isInspecting={isInspecting}
           isLearningWebsite={isLearningWebsite}
           summary={pageSummary}
-          onIntentChange={setWebsiteIntent}
+          onIntentChange={(value) => {
+            setWebsiteIntent(value);
+            if (compiledToolGroup) {
+              setCommand(value);
+              setWorkflowInputs(inferWorkflowRunInputs(value, workflowInputs));
+            }
+          }}
           onInspect={handleInspectActivePage}
-          onLearnWebsite={handleLearnWebsite}
           onSaveSchema={handleSaveGeneratedSchema}
-          isSuggestedToolSaved={Boolean(compiledToolGroup && schemas.length > 0)}
           onStartCapture={handleStartCapture}
           onStopCapture={handleStopCapture}
           onToggleAdvanced={() => setAdvancedOpen((current) => !current)}
@@ -752,7 +793,9 @@ export default function App() {
           agentMessages={agentMessages}
           auditEvents={auditEvents}
           command={command}
+          compileActivity={compileActivity}
           isExtension={isExtension}
+          isCompilingWebsite={isLearningWebsite}
           isLearning={isLearning}
           isRunning={isRunning}
           pendingApproval={pendingApproval}
@@ -761,7 +804,9 @@ export default function App() {
           replayTrace={replayTrace}
           schemas={schemas}
           selectedSchema={selectedSchema}
+          taskPlan={taskPlan}
           toolParams={toolParams}
+          workflowInputs={workflowInputs}
           compiledToolGroup={compiledToolGroup}
           vendorAgentEvents={vendorAgentEvents}
           onAllow={handleAllow}
@@ -771,12 +816,157 @@ export default function App() {
           onRun={handleRun}
           onRunSelectedTool={handleRunSelectedTool}
           onSelectSchema={(schema) => setSelectedToolName(schema.name)}
+          onWorkflowInputChange={(nextInputs) => {
+            setWorkflowInputs(nextInputs);
+            const nextPrompt = formatVendorPaymentPrompt(nextInputs);
+            setCommand(nextPrompt);
+            setWebsiteIntent(nextPrompt);
+          }}
           onToolParamChange={(name, value) => setToolParams((current) => ({ ...current, [name]: value }))}
           onUsePreset={() => setCommand(presetCommand)}
+        />
+        <WorkflowActionBar
+          hasCompiledWorkflow={Boolean(compiledToolGroup)}
+          isCompiling={isLearningWebsite}
+          isRunning={isRunning}
+          pendingApproval={pendingApproval}
+          taskPlan={taskPlan}
+          toolCount={schemas.length}
+          onAllow={handleAllow}
+          onCompile={handleLearnWebsite}
+          onDeny={handleDeny}
+          onRun={handleRun}
         />
       </div>
     </main>
   );
+}
+
+function WorkflowActionBar({
+  hasCompiledWorkflow,
+  isCompiling,
+  isRunning,
+  pendingApproval,
+  taskPlan,
+  toolCount,
+  onAllow,
+  onCompile,
+  onDeny,
+  onRun,
+}: {
+  hasCompiledWorkflow: boolean;
+  isCompiling: boolean;
+  isRunning: boolean;
+  pendingApproval?: PendingApproval;
+  taskPlan: WorkflowTaskPlan;
+  toolCount: number;
+  onAllow: () => void;
+  onCompile: () => void;
+  onDeny: () => void;
+  onRun: () => void;
+}) {
+  if (pendingApproval) {
+    return (
+      <div className="workflow-action-bar workflow-action-bar-approval" aria-label="Workflow approval">
+        <div className="workflow-action-copy">
+          <strong>Approval needed</strong>
+          <span>{pendingApproval.schema.risk} · {pendingApproval.schema.name}</span>
+        </div>
+        <div className="workflow-action-buttons">
+          <button type="button" className="secondary-button" onClick={onDeny}>
+            Deny
+          </button>
+          <button type="button" className="primary-button" onClick={onAllow}>
+            Allow
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const primaryLabel = isCompiling
+    ? "Compiling..."
+    : isRunning
+      ? "Running..."
+      : hasCompiledWorkflow
+        ? taskPlan.missingCapabilities.length > 0
+          ? "Compile missing tool"
+          : "Run workflow"
+        : "Compile tools";
+
+  return (
+    <div className="workflow-action-bar" aria-label="Workflow actions">
+      <div className="workflow-action-copy">
+        <strong>{actionBarTitle(hasCompiledWorkflow, taskPlan)}</strong>
+        <span>{actionBarSummary(hasCompiledWorkflow, toolCount, taskPlan)}</span>
+      </div>
+      <div className="workflow-action-buttons">
+        {hasCompiledWorkflow && taskPlan.missingCapabilities.length === 0 && !isCompiling && !isRunning && (
+          <button type="button" className="workflow-action-link" onClick={onCompile}>
+            Recompile
+          </button>
+        )}
+        <button
+          type="button"
+          className="primary-button"
+          onClick={hasCompiledWorkflow && taskPlan.missingCapabilities.length === 0 ? onRun : onCompile}
+          disabled={isCompiling || isRunning}
+        >
+          {primaryLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function actionBarTitle(hasCompiledWorkflow: boolean, taskPlan: WorkflowTaskPlan): string {
+  if (!hasCompiledWorkflow) {
+    return "Compile required";
+  }
+
+  if (taskPlan.missingCapabilities.length > 0) {
+    return "Missing capability";
+  }
+
+  return "Ready";
+}
+
+function actionBarSummary(
+  hasCompiledWorkflow: boolean,
+  toolCount: number,
+  taskPlan: WorkflowTaskPlan,
+): string {
+  if (!hasCompiledWorkflow) {
+    return "Create tools once, then reuse them for runs";
+  }
+
+  if (taskPlan.missingCapabilities.length > 0) {
+    return `${taskPlan.reusedTools.length} reused · ${taskPlan.missingCapabilities.length} missing`;
+  }
+
+  return `${toolCount} reusable tools saved · ${taskPlan.guardedTools.length} guarded`;
+}
+
+function mergeToolSchemas(existingTools: ToolSchema[], compiledTools: ToolSchema[]): ToolSchema[] {
+  const existingNames = new Set(existingTools.map((tool) => tool.name));
+  const newTools = compiledTools.filter((tool) => !existingNames.has(tool.name));
+  return [...newTools, ...existingTools];
+}
+
+function mergeWorkflowPlan(
+  existingPlan: CompiledToolGroup["workflowPlan"],
+  compiledPlan: CompiledToolGroup["workflowPlan"],
+  merge: boolean,
+): CompiledToolGroup["workflowPlan"] {
+  if (!merge) {
+    return compiledPlan;
+  }
+
+  const existingTools = new Set(existingPlan.map((step) => step.tool));
+  return [
+    ...existingPlan,
+    ...compiledPlan.filter((step) => !existingTools.has(step.tool)),
+  ];
 }
 
 function collectSchemaParams(schema: ToolSchema, values: Record<string, string>): Record<string, unknown> {
@@ -857,7 +1047,11 @@ function isVendorPaymentRequest(command: string): boolean {
   return normalized.includes("payment packet") || normalized.includes("overdue invoice");
 }
 
-function isVendorPaymentGroup(group: CompiledToolGroup): boolean {
+function isVendorPaymentGroup(group?: CompiledToolGroup): group is CompiledToolGroup {
+  if (!group) {
+    return false;
+  }
+
   const tools = new Set(group.tools.map((tool) => tool.name));
   return tools.has("searchInvoices") && tools.has("exportBankDetails");
 }

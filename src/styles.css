@@ -41,6 +41,7 @@ button {
   min-width: 360px;
   min-height: 100vh;
   background: #fbfcfd;
+  padding-bottom: 92px;
 }
 
 .extension-panel-stack {
@@ -331,6 +332,7 @@ button {
 .graft-panel {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   max-height: 100vh;
   overflow: auto;
   border-left: 1px solid #c4cad0;
@@ -564,6 +566,7 @@ button {
 }
 
 .panel-section {
+  min-width: 0;
   padding: 16px 18px;
   border-bottom: 1px solid #e2e6ea;
 }
@@ -572,6 +575,7 @@ button {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
   margin-bottom: 10px;
 }
 
@@ -657,6 +661,8 @@ button {
 .schema-viewer code,
 .approval-card code {
   display: block;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
   border: 1px solid #d8e0e7;
   border-radius: 6px;
@@ -668,6 +674,8 @@ button {
 }
 
 .schema-viewer pre {
+  max-width: 100%;
+  min-width: 0;
   overflow: auto;
   max-height: 220px;
   margin: 8px 0 0;
@@ -805,8 +813,36 @@ textarea {
   display: grid;
   gap: 2px;
   border-left: 3px solid #126b82;
+  background: #f4fafc;
+  padding: 8px 10px 8px 9px;
+}
+
+.workflow-paused-section {
+  background: #fffdfa;
+}
+
+.workflow-paused-section .section-heading span {
+  border-radius: 999px;
+  background: #fff4d6;
+  color: #725100;
+  padding: 2px 7px;
+  font-weight: 900;
+}
+
+.agent-workflow-list .agent-event-guard-active {
+  border-left-color: #bd8a16;
+  background: #fff9e8;
+  box-shadow: inset 0 0 0 1px #f2d999;
+}
+
+.agent-workflow-list .agent-event-guard-resolved {
+  border-left-color: #8fa4b3;
   background: #f7fafc;
-  padding: 8px 10px;
+}
+
+.agent-workflow-list .agent-event-packet_generated {
+  border-left-color: #2e7d52;
+  background: #f1faf5;
 }
 
 .agent-workflow-list strong {
@@ -835,12 +871,55 @@ textarea {
   font-weight: 700;
 }
 
+.compile-loading {
+  margin-bottom: 10px;
+}
+
+.compile-activity {
+  margin-bottom: 10px;
+  border: 1px solid #d7dde3;
+  border-radius: 8px;
+  background: #f7fafc;
+  padding: 9px 10px;
+}
+
+.compile-activity summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #253343;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.compile-activity summary small {
+  color: #718091;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.compile-activity ol {
+  display: grid;
+  gap: 6px;
+  margin: 9px 0 0;
+  padding-left: 18px;
+}
+
+.compile-activity li {
+  color: #405064;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .compiled-section-heading {
   align-items: center;
 }
 
 .compiled-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   min-width: 0;
 }
@@ -865,6 +944,7 @@ textarea {
 .compiled-workflow-card {
   display: grid;
   gap: 4px;
+  min-width: 0;
   margin-bottom: 10px;
   border: 1px solid #b7d8e1;
   border-radius: 8px;
@@ -891,6 +971,7 @@ textarea {
 .compiled-workflow-group {
   display: grid;
   gap: 6px;
+  min-width: 0;
   margin-top: 8px;
 }
 
@@ -909,6 +990,8 @@ textarea {
 }
 
 .compiled-tool-pills span {
+  max-width: 100%;
+  overflow: hidden;
   border: 1px solid #c7dbe2;
   border-radius: 999px;
   background: #fff;
@@ -917,6 +1000,7 @@ textarea {
   font-family: SFMono-Regular, Consolas, monospace;
   font-size: 10px;
   font-weight: 800;
+  text-overflow: ellipsis;
 }
 
 .compiled-step-list {
@@ -940,6 +1024,12 @@ textarea {
   font-family: SFMono-Regular, Consolas, monospace;
   font-size: 11px;
   font-weight: 800;
+  min-width: 0;
+}
+
+.compiled-step-list li span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .compiled-step-list b {
@@ -963,6 +1053,7 @@ textarea {
   justify-content: space-between;
   gap: 10px;
   width: 100%;
+  min-width: 0;
   border: 1px solid #d4e3e8;
   border-radius: 6px;
   background: #fff;
@@ -986,15 +1077,18 @@ textarea {
   color: #142536;
   font-family: SFMono-Regular, Consolas, monospace;
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .generated-tool-list small {
   color: #607080;
   font-size: 11px;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .generated-tool-list b {
+  flex-shrink: 0;
   border-radius: 999px;
   background: #eef6f1;
   color: #1d6f4b;
@@ -1003,9 +1097,222 @@ textarea {
   text-transform: uppercase;
 }
 
+.tool-library-sections {
+  display: grid;
+  gap: 10px;
+}
+
+.tool-library-section {
+  display: grid;
+  gap: 6px;
+}
+
+.tool-library-section h4 {
+  margin: 0;
+  color: #526273;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.tool-library-empty {
+  border: 1px dashed #c9d2db;
+  border-radius: 6px;
+  color: #718091;
+  padding: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tool-library-missing div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tool-library-missing span {
+  border: 1px solid #e4c674;
+  border-radius: 999px;
+  background: #fffaf0;
+  color: #6d4a00;
+  padding: 3px 7px;
+  font-family: SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.generated-tool-schema {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 10px;
+  border-top: 1px solid #d4e3e8;
+  padding-top: 10px;
+}
+
+.generated-tool-schema .section-heading {
+  margin-bottom: 0;
+}
+
+.generated-tool-schema h4 {
+  margin: 0;
+  color: #253343;
+  font-size: 12px;
+}
+
+.task-plan-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #d4e3e8;
+  border-radius: 8px;
+  background: #f7fafc;
+  padding: 12px;
+}
+
+.task-plan-ready {
+  border-color: #bad9c5;
+  background: #f4fbf7;
+}
+
+.task-plan-partial,
+.task-plan-needs_tools {
+  border-color: #dfc58c;
+  background: #fffaf0;
+}
+
+.task-plan-summary {
+  display: grid;
+  gap: 2px;
+}
+
+.task-plan-summary strong {
+  color: #142536;
+  font-size: 14px;
+}
+
+.task-plan-summary span {
+  color: #526273;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.task-plan-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.task-plan-metrics span {
+  display: grid;
+  gap: 2px;
+  border: 1px solid #d7dde3;
+  border-radius: 6px;
+  background: #fff;
+  color: #607080;
+  padding: 7px;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.task-plan-metrics strong {
+  color: #142536;
+  font-size: 14px;
+}
+
+.workflow-inputs {
+  display: grid;
+  gap: 8px;
+}
+
+.workflow-inputs label {
+  display: grid;
+  gap: 4px;
+  color: #344354;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.workflow-inputs input,
+.workflow-inputs select {
+  width: 100%;
+  border: 1px solid #c5ced6;
+  border-radius: 6px;
+  background: #fff;
+  color: #162331;
+  padding: 8px 10px;
+}
+
+.missing-capabilities {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid #eadbad;
+  padding-top: 9px;
+}
+
+.missing-capabilities strong {
+  color: #6d4a00;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.missing-capabilities div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.missing-capabilities span {
+  border: 1px solid #e4c674;
+  border-radius: 999px;
+  background: #fff;
+  color: #6d4a00;
+  padding: 3px 7px;
+  font-family: SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 800;
+}
+
 .payment-packet {
   display: grid;
   gap: 12px;
+}
+
+.packet-heading {
+  align-items: center;
+}
+
+.packet-heading div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.packet-download-button {
+  min-height: 32px;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.packet-notice {
+  border: 1px solid #d7dde3;
+  border-radius: 6px;
+  padding: 9px 10px;
+  color: #405064;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.packet-notice-included {
+  border-color: #bad9c5;
+  background: #f0faf5;
+  color: #1d6f4b;
+}
+
+.packet-notice-redacted {
+  border-color: #dfc58c;
+  background: #fff8df;
+  color: #6d4a00;
 }
 
 .packet-summary-grid {
@@ -1033,6 +1340,11 @@ textarea {
   text-transform: none;
 }
 
+.packet-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .payment-packet table {
   width: 100%;
   border-collapse: collapse;
@@ -1058,13 +1370,16 @@ textarea {
 .audit-timeline {
   display: grid;
   gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .audit-timeline li {
   display: grid;
   gap: 2px;
-  border-left: 3px solid #126b82;
-  padding-left: 9px;
+  border-left: 3px solid #9aa6b2;
+  padding: 8px 10px 8px 9px;
 }
 
 .audit-timeline time {
@@ -1147,33 +1462,32 @@ textarea {
 }
 
 .compile-status {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 2px 8px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   margin-bottom: 10px;
-  border: 1px solid #d7dde3;
-  border-radius: 8px;
-  background: #f7fafc;
-  padding: 9px 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .compile-status strong {
   color: #253343;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .compile-status span:last-child {
-  grid-column: 2;
   color: #667585;
   font-size: 12px;
 }
 
 .compile-status-idle::before,
 .compile-status-compiled::before {
-  display: block;
+  display: inline-block;
+  flex: 0 0 auto;
   width: 9px;
   height: 9px;
-  margin-top: 5px;
   border-radius: 999px;
   content: "";
 }
@@ -1213,6 +1527,70 @@ textarea {
 .intent-panel {
   display: grid;
   gap: 8px;
+}
+
+.workflow-action-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border-top: 1px solid #cfd8df;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 -8px 24px rgba(21, 35, 48, 0.08);
+  padding: 10px 14px;
+}
+
+.workflow-action-bar-approval {
+  border-top-color: #d7a84b;
+  background: rgba(255, 248, 223, 0.98);
+}
+
+.workflow-action-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.workflow-action-copy strong {
+  color: #1d2b39;
+  font-size: 12px;
+}
+
+.workflow-action-copy span {
+  overflow: hidden;
+  color: #667585;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workflow-action-buttons .primary-button,
+.workflow-action-buttons .secondary-button {
+  min-height: 34px;
+  padding: 7px 11px;
+  white-space: nowrap;
+}
+
+.workflow-action-link {
+  border: 0;
+  background: transparent;
+  color: #126b82;
+  padding: 7px 4px;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .learn-actions {

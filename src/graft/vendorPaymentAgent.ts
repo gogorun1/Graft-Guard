@@ -1,5 +1,6 @@
 import { mockInvoices, type Invoice } from "../demo-erp/mockOrders";
 import type { CompiledToolGroup, WorkflowPlanStep } from "./agentCompiler";
+import type { WorkflowRunInputs } from "./workflowPlanner";
 
 export type PaymentPacketInvoice = {
   invoiceId: string;
@@ -31,31 +32,37 @@ export type VendorAgentRun = {
   packet?: PaymentPacket;
 };
 
-export function parseVendorPaymentRequest(request: string): { status: "overdue"; minAmount: number } {
+export function parseVendorPaymentRequest(request: string): { status: WorkflowRunInputs["status"]; minAmount: number } {
   const amountMatch = request.match(/(?:above|over|greater than|>)\s*(?:eur|€)?\s*([\d,]+)/i);
   const minAmount = amountMatch ? Number(amountMatch[1].replace(/,/g, "")) : 5000;
-  return { status: "overdue", minAmount: Number.isFinite(minAmount) ? minAmount : 5000 };
+  return {
+    status: inferInvoiceStatus(request),
+    minAmount: Number.isFinite(minAmount) ? minAmount : 5000,
+  };
 }
 
-export function startVendorPaymentWorkflow(request: string): VendorAgentRun {
-  const { minAmount, status } = parseVendorPaymentRequest(request);
-
+export function startVendorPaymentWorkflow(request: string, inputs?: WorkflowRunInputs): VendorAgentRun {
   return runVendorPaymentSteps(
     [
       {
         tool: "searchInvoices",
-        args: { status, minAmount },
       },
       { tool: "openInvoice", forEach: "searchInvoices.result" },
       { tool: "extractPaymentPacket", args: { invoiceIds: "$openedInvoices" } },
       { tool: "exportBankDetails", args: { invoiceIds: "$openedInvoices" }, guard: true },
     ],
     request,
+    undefined,
+    inputs,
   );
 }
 
-export function startCompiledVendorPaymentWorkflow(group: CompiledToolGroup, request: string): VendorAgentRun {
-  return runVendorPaymentSteps(group.workflowPlan, request, group);
+export function startCompiledVendorPaymentWorkflow(
+  group: CompiledToolGroup,
+  request: string,
+  inputs?: WorkflowRunInputs,
+): VendorAgentRun {
+  return runVendorPaymentSteps(group.workflowPlan, request, group, inputs);
 }
 
 export function finishVendorPaymentWorkflow(invoiceIds: string[], includeBankDetails: boolean): VendorAgentRun {
@@ -81,8 +88,60 @@ export function finishVendorPaymentWorkflow(invoiceIds: string[], includeBankDet
   };
 }
 
-function searchInvoices(status: "overdue", minAmount: number): Invoice[] {
-  return mockInvoices.filter((invoice) => invoice.status === status && invoice.amount >= minAmount);
+function searchInvoices(
+  status: WorkflowRunInputs["status"],
+  minAmount: number,
+  riskFilter: WorkflowRunInputs["riskFilter"],
+): Invoice[] {
+  return mockInvoices.filter(
+    (invoice) =>
+      (status === "all" || invoice.status === status) &&
+      invoice.amount >= minAmount &&
+      matchesRiskFilter(invoice.riskFlag, riskFilter),
+  );
+}
+
+function matchesRiskFilter(
+  riskFlag: Invoice["riskFlag"],
+  riskFilter: WorkflowRunInputs["riskFilter"],
+): boolean {
+  if (riskFilter === "all") {
+    return true;
+  }
+
+  if (riskFilter === "flagged") {
+    return riskFlag !== "none";
+  }
+
+  return riskFlag === riskFilter;
+}
+
+function riskFilterSearchText(riskFilter: WorkflowRunInputs["riskFilter"]): string {
+  const text: Record<WorkflowRunInputs["riskFilter"], string> = {
+    all: "",
+    none: " with clear vendors only",
+    review: " with review-flagged vendors only",
+    blocked: " with blocked vendors only",
+    flagged: " with flagged vendors only",
+  };
+
+  return text[riskFilter];
+}
+
+function inferInvoiceStatus(request: string): WorkflowRunInputs["status"] {
+  if (/\ball invoices?\b/i.test(request)) {
+    return "all";
+  }
+
+  if (/\bpending invoices?\b/i.test(request)) {
+    return "pending";
+  }
+
+  if (/\bpaid invoices?\b/i.test(request)) {
+    return "paid";
+  }
+
+  return "overdue";
 }
 
 function openInvoice(invoiceId: string): Invoice {
@@ -125,6 +184,7 @@ function runVendorPaymentSteps(
   steps: WorkflowPlanStep[],
   request: string,
   group?: CompiledToolGroup,
+  inputs?: WorkflowRunInputs,
 ): VendorAgentRun {
   const events: VendorAgentEvent[] = [];
   const state: VendorWorkflowState = {
@@ -152,7 +212,7 @@ function runVendorPaymentSteps(
       return { events, guardInvoiceIds: invoiceIds };
     }
 
-    runVendorTool(step, request, state, events);
+    runVendorTool(step, request, state, events, inputs);
   }
 
   return { events };
@@ -163,15 +223,16 @@ function runVendorTool(
   request: string,
   state: VendorWorkflowState,
   events: VendorAgentEvent[],
+  inputs?: WorkflowRunInputs,
 ): void {
   if (step.tool === "searchInvoices") {
-    const args = searchInvoiceArgs(step, request);
+    const args = searchInvoiceArgs(step, request, inputs);
     events.push({
       type: "tool_call",
       tool: "searchInvoices",
-      message: `searchInvoices(status=${args.status}, minAmount=${args.minAmount})`,
+      message: `Searching ${args.status} invoices above EUR ${args.minAmount.toLocaleString("en-US")}${riskFilterSearchText(args.riskFilter)}`,
     });
-    state.searchedInvoices = searchInvoices(args.status, args.minAmount);
+    state.searchedInvoices = searchInvoices(args.status, args.minAmount, args.riskFilter);
     events.push({
       type: "tool_result",
       tool: "searchInvoices",
@@ -222,11 +283,13 @@ function runVendorTool(
 function searchInvoiceArgs(
   step: WorkflowPlanStep,
   request: string,
-): { status: "overdue"; minAmount: number } {
+  inputs?: WorkflowRunInputs,
+): { status: WorkflowRunInputs["status"]; minAmount: number; riskFilter: WorkflowRunInputs["riskFilter"] } {
   const parsed = parseVendorPaymentRequest(request);
-  const minAmount = numberArg(step.args?.minAmount) ?? parsed.minAmount;
-  const status = step.args?.status === "overdue" ? "overdue" : parsed.status;
-  return { status, minAmount };
+  const minAmount = numberArg(step.args?.minAmount) ?? inputs?.minAmount ?? parsed.minAmount;
+  const status = statusArg(step.args?.status) ?? inputs?.status ?? parsed.status;
+  const riskFilter = riskFilterArg(step.args?.riskFilter) ?? inputs?.riskFilter ?? "all";
+  return { status, minAmount, riskFilter };
 }
 
 function resolveInvoiceIds(step: WorkflowPlanStep, state: VendorWorkflowState): string[] {
@@ -269,4 +332,20 @@ function numberArg(value: unknown): number | undefined {
   }
 
   return undefined;
+}
+
+function statusArg(value: unknown): WorkflowRunInputs["status"] | undefined {
+  return value === "all" || value === "overdue" || value === "pending" || value === "paid"
+    ? value
+    : undefined;
+}
+
+function riskFilterArg(value: unknown): WorkflowRunInputs["riskFilter"] | undefined {
+  return value === "all" ||
+    value === "none" ||
+    value === "review" ||
+    value === "blocked" ||
+    value === "flagged"
+    ? value
+    : undefined;
 }

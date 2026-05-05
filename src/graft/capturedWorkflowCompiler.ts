@@ -92,6 +92,11 @@ export function savePageSchema(page: PageDomSummary, schema: ToolSchema): ToolSc
   return next;
 }
 
+export function replacePageSchemas(page: PageDomSummary, schemas: ToolSchema[]): ToolSchema[] {
+  localStorage.setItem(pageSchemaCacheKey(page), JSON.stringify(schemas));
+  return schemas;
+}
+
 function pageSchemaCacheKey(page: PageDomSummary): string {
   return `graftguard.schemas.page.${hashString(`${page.origin}:${page.fingerprint}`)}`;
 }

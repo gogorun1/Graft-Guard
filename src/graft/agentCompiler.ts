@@ -23,6 +23,8 @@ export type CompiledToolGroup = {
 export type AgentCompilerInput = {
   prompt: string;
   pageSummary: PageDomSummary;
+  existingTools?: ToolSchema[];
+  missingCapabilities?: string[];
 };
 
 type AgentCompilerResponse = Omit<CompiledToolGroup, "provider">;
@@ -32,7 +34,7 @@ export async function compileToolGroupWithAgent(input: AgentCompilerInput): Prom
     try {
       const response = await callAgentCompiler(input);
       validateCompiledToolGroup(response);
-      return { ...response, provider: "agent-api" };
+      return { ...dedupeExistingTools(response, input), provider: "agent-api" };
     } catch (error) {
       return compileLocalToolGroup(input, error);
     }
@@ -65,6 +67,10 @@ export function compileLocalVendorPaymentGroup(
       ? `Agent API fallback: ${fallbackReason.message}`
       : "Local deterministic vendor workflow compiler";
 
+  if (input.missingCapabilities?.length) {
+    return compileLocalMissingCapabilityGroup(input, reason);
+  }
+
   return {
     name: "Vendor payment workflow",
     description: "Prepare a guarded payment packet from overdue vendor invoices.",
@@ -90,6 +96,10 @@ function compileLocalToolGroup(
   input: AgentCompilerInput,
   fallbackReason?: unknown,
 ): CompiledToolGroup {
+  if (input.missingCapabilities?.length) {
+    return compileLocalMissingCapabilityGroup(input, fallbackReason);
+  }
+
   if (isVendorPaymentPage(input.pageSummary)) {
     return compileLocalVendorPaymentGroup(input, fallbackReason);
   }
@@ -117,6 +127,8 @@ async function callAgentCompiler(input: AgentCompilerInput): Promise<AgentCompil
     body: JSON.stringify({
       prompt: input.prompt,
       pageSummary: input.pageSummary,
+      existingTools: summarizeExistingTools(input.existingTools ?? []),
+      missingCapabilities: input.missingCapabilities ?? [],
       model: import.meta.env.VITE_MINIMAX_MODEL,
     }),
   });
@@ -126,6 +138,86 @@ async function callAgentCompiler(input: AgentCompilerInput): Promise<AgentCompil
   }
 
   return response.json() as Promise<AgentCompilerResponse>;
+}
+
+function dedupeExistingTools(
+  group: AgentCompilerResponse,
+  input: AgentCompilerInput,
+): AgentCompilerResponse {
+  const existingNames = new Set((input.existingTools ?? []).map((tool) => tool.name));
+  if (existingNames.size === 0) {
+    return group;
+  }
+
+  const nextTools = group.tools.filter((tool) => !existingNames.has(tool.name));
+  return {
+    ...group,
+    tools: nextTools,
+    riskNotes: [
+      ...(group.riskNotes ?? []),
+      `Preserved ${existingNames.size} existing tools and ignored same-name regenerated tools.`,
+    ],
+  };
+}
+
+function summarizeExistingTools(tools: ToolSchema[]): Array<Pick<ToolSchema, "name" | "description" | "risk">> {
+  return tools.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    risk: tool.risk,
+  }));
+}
+
+function compileLocalMissingCapabilityGroup(
+  input: AgentCompilerInput,
+  fallbackReason?: unknown,
+): CompiledToolGroup {
+  const reason =
+    fallbackReason instanceof Error
+      ? `Agent API fallback: ${fallbackReason.message}`
+      : "Local deterministic missing-capability compiler";
+  const tools = (input.missingCapabilities ?? []).map(toolForMissingCapability);
+
+  return {
+    name: "Missing capability compile",
+    description: "Compile only capabilities not covered by saved tools.",
+    tools,
+    workflowPlan: tools.map((tool) => ({
+      tool: tool.name,
+      guard: tool.risk === "export" || tool.risk === "destructive",
+    })),
+    riskNotes: [
+      reason,
+      "Existing same-name tools are preserved by the client merge step.",
+    ],
+    provider: "local-fallback",
+  };
+}
+
+function toolForMissingCapability(name: string): ToolSchema {
+  const risk = /^(apply|approve|delete|remove|revoke)/i.test(name)
+    ? "destructive"
+    : /export|download|bank/i.test(name)
+      ? "export"
+      : /^(draft|create|submit|save|update)/i.test(name)
+        ? "write"
+        : "read";
+
+  return {
+    name,
+    description: `${name} generated as a missing workflow capability`,
+    risk,
+    inputSchema: {
+      type: "object",
+      properties: {
+        targetId: { type: "string", title: "Target ID" },
+      },
+      required: risk === "read" ? [] : ["targetId"],
+    },
+    replayPlan: risk === "read" && name.startsWith("search")
+      ? [{ type: "extractTable", selector: "#invoices-table" }]
+      : [],
+  };
 }
 
 function validateCompiledToolGroup(group: AgentCompilerResponse): void {
