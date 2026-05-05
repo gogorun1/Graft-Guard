@@ -17,6 +17,7 @@ import {
 import { createAuditEvent, type AuditEvent } from "./graft/auditLog";
 import {
   compileCapturedWorkflow,
+  replacePageSchemas,
   savePageSchema,
   type CandidateTool,
 } from "./graft/capturedWorkflowCompiler";
@@ -261,10 +262,7 @@ export default function App() {
       );
       addCompileActivity(`Normalized draft into ${group.tools.length} reusable tools`);
       addCompileActivity(`Validated ${group.workflowPlan.length} planned workflow steps`);
-      let savedTools = group.tools;
-      for (const tool of group.tools) {
-        savedTools = savePageSchema(summary, tool);
-      }
+      const savedTools = replacePageSchemas(summary, group.tools);
       addCompileActivity("Cached reusable tools for this page");
       setCompiledToolGroup(group);
       setSchemas(savedTools);
@@ -720,10 +718,17 @@ export default function App() {
           isExtension={isExtension}
           isInspecting={isInspecting}
           isLearningWebsite={isLearningWebsite}
+          isRunning={isRunning}
           summary={pageSummary}
-          onIntentChange={setWebsiteIntent}
+          onIntentChange={(value) => {
+            setWebsiteIntent(value);
+            if (compiledToolGroup) {
+              setCommand(value);
+            }
+          }}
           onInspect={handleInspectActivePage}
           onLearnWebsite={handleLearnWebsite}
+          onRunWorkflow={handleRun}
           onSaveSchema={handleSaveGeneratedSchema}
           onStartCapture={handleStartCapture}
           onStopCapture={handleStopCapture}

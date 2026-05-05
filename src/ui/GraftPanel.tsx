@@ -74,6 +74,7 @@ export function GraftPanel({
 }: Props) {
   const [compiledTab, setCompiledTab] = useState<"workflow" | "tools">("workflow");
   const [compileActivityOpen, setCompileActivityOpen] = useState(false);
+  const [compileElapsedSeconds, setCompileElapsedSeconds] = useState(0);
   const showCompiledArea = isCompilingWebsite || compileActivity.length > 0 || Boolean(compiledToolGroup);
 
   useEffect(() => {
@@ -86,6 +87,20 @@ export function GraftPanel({
       setCompileActivityOpen(false);
     }
   }, [isCompilingWebsite, compiledToolGroup]);
+
+  useEffect(() => {
+    if (!isCompilingWebsite) {
+      setCompileElapsedSeconds(0);
+      return;
+    }
+
+    setCompileElapsedSeconds(0);
+    const interval = window.setInterval(() => {
+      setCompileElapsedSeconds((current) => current + 1);
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [isCompilingWebsite]);
 
   return (
     <aside className="graft-panel" aria-label="Graft Guard panel">
@@ -116,69 +131,71 @@ export function GraftPanel({
       {showCompiledArea && (
         <section className="panel-section">
           <div className="section-heading compiled-section-heading">
-            {compiledToolGroup ? (
-              <div className="compiled-tabs" role="tablist" aria-label="Compiled output">
-                <button
-                  type="button"
-                  className={compiledTab === "workflow" ? "active" : ""}
-                  onClick={() => setCompiledTab("workflow")}
-                >
-                  Compiled workflow
-                </button>
-                <button
-                  type="button"
-                  className={compiledTab === "tools" ? "active" : ""}
-                  onClick={() => setCompiledTab("tools")}
-                >
-                  Generated tools
-                </button>
-              </div>
-            ) : (
-              <h3>Compiled workflow</h3>
-            )}
-            <span>{compiledProviderLabel(isCompilingWebsite, compiledToolGroup)}</span>
+            <div className="compiled-tabs" role="tablist" aria-label="Compiled output">
+              <button
+                type="button"
+                className={compiledTab === "workflow" ? "active" : ""}
+                onClick={() => setCompiledTab("workflow")}
+              >
+                Compiled workflow
+              </button>
+              <button
+                type="button"
+                className={compiledTab === "tools" ? "active" : ""}
+                onClick={() => setCompiledTab("tools")}
+              >
+                Generated tools
+              </button>
+            </div>
           </div>
 
-          {compileActivity.length > 0 && (
-            <details
-              className="compile-activity"
-              open={compileActivityOpen}
-              onToggle={(event) => setCompileActivityOpen(event.currentTarget.open)}
-            >
-              <summary>
-                <span>{isCompilingWebsite ? "Agent is compiling" : "Agent compile log"}</span>
-                <small>{compileActivity.length} steps</small>
-              </summary>
-              <ol>
-                {compileActivity.map((event, index) => (
-                  <li key={`${event}-${index}`}>{event}</li>
-                ))}
-              </ol>
-            </details>
-          )}
-
-          {isCompilingWebsite && !compiledToolGroup && (
-            <div className="workflow-run-loading compile-loading">
-              <span className="loading-dot" aria-hidden="true" />
-              <span>{compileActivity[compileActivity.length - 1] ?? "Compiling this page into reusable tools."}</span>
-            </div>
-          )}
-
-          {compiledToolGroup && compiledTab === "workflow" ? (
+          {compiledTab === "workflow" ? (
             <div className="compiled-workflow-card">
-              <strong>{compiledToolGroup.name}</strong>
-              <span>{compiledToolGroup.description}</span>
-              <div className="compiled-workflow-group">
-                <h4>{compiledToolGroup.workflowPlan.length} planned steps</h4>
-                <ol className="compiled-step-list">
-                  {compiledToolGroup.workflowPlan.map((step, index) => (
-                    <li key={`${step.tool}-${index}`}>
-                      <span>{step.tool}</span>
-                      {step.guard && <b>Guard</b>}
-                    </li>
-                  ))}
-                </ol>
-              </div>
+              {compileActivity.length > 0 && (
+                <details
+                  className="compile-activity"
+                  open={compileActivityOpen}
+                  onToggle={(event) => setCompileActivityOpen(event.currentTarget.open)}
+                >
+                  <summary>
+                    <span>{isCompilingWebsite ? "Agent is compiling" : "Agent compile log"}</span>
+                    <small>{compileActivity.length} steps</small>
+                  </summary>
+                  <ol>
+                    {compileActivity.map((event, index) => (
+                      <li key={`${event}-${index}`}>{event}</li>
+                    ))}
+                  </ol>
+                </details>
+              )}
+
+              {isCompilingWebsite && !compiledToolGroup && (
+                <div className="workflow-run-loading compile-loading">
+                  <span className="loading-dot" aria-hidden="true" />
+                  <span>
+                    {compileActivity[compileActivity.length - 1] ?? "Compiling this page into reusable tools."}
+                    {compileElapsedSeconds > 0 ? ` (${compileElapsedSeconds}s)` : ""}
+                  </span>
+                </div>
+              )}
+
+              {compiledToolGroup && (
+                <>
+                  <strong>{compiledToolGroup.name}</strong>
+                  <span>{compiledToolGroup.description}</span>
+                  <div className="compiled-workflow-group">
+                    <h4>{compiledToolGroup.workflowPlan.length} planned steps</h4>
+                    <ol className="compiled-step-list">
+                      {compiledToolGroup.workflowPlan.map((step, index) => (
+                        <li key={`${step.tool}-${index}`}>
+                          <span>{step.tool}</span>
+                          {step.guard && <b>Guard</b>}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                </>
+              )}
             </div>
           ) : compiledToolGroup ? (
             <div className="compiled-workflow-card">
@@ -216,7 +233,14 @@ export function GraftPanel({
                 </div>
               )}
             </div>
-          ) : null}
+          ) : (
+            <div className="compiled-workflow-card">
+              <div className="workflow-run-loading compile-loading">
+                {isCompilingWebsite && <span className="loading-dot" aria-hidden="true" />}
+                <span>Reusable tools will appear here after compile.</span>
+              </div>
+            </div>
+          )}
 
           {compiledToolGroup && isExtension && (
             <button
@@ -231,7 +255,7 @@ export function GraftPanel({
         </section>
       )}
 
-      {!compiledToolGroup && (!isExtension || schemas.length > 0) && (
+      {!showCompiledArea && (!isExtension || schemas.length > 0) && (
         <section className="panel-section">
           <div className="section-heading">
             <h3>Compiled tools</h3>
@@ -286,7 +310,7 @@ export function GraftPanel({
         </section>
       )}
 
-      {(!isExtension || (selectedSchema && !compiledToolGroup)) && (
+      {(!isExtension || (selectedSchema && !showCompiledArea)) && (
         <section className="panel-section">
           <div className="section-heading">
             <h3>Schema</h3>
@@ -296,7 +320,7 @@ export function GraftPanel({
         </section>
       )}
 
-      {selectedSchema && (!isExtension || !compiledToolGroup) && (
+      {selectedSchema && (!isExtension || !showCompiledArea) && (
         <section className="panel-section">
           <div className="section-heading">
             <h3>Tool inputs</h3>
@@ -474,21 +498,6 @@ function runStatusLabel(
   }
 
   return `${eventCount} events`;
-}
-
-function compiledProviderLabel(
-  isCompilingWebsite: boolean,
-  compiledToolGroup: CompiledToolGroup | undefined,
-): string {
-  if (isCompilingWebsite) {
-    return "compiling";
-  }
-
-  if (!compiledToolGroup) {
-    return "not compiled";
-  }
-
-  return compiledToolGroup.provider === "agent-api" ? "Agent API" : "local fallback";
 }
 
 function inputTypeForProperty(property: unknown): string {

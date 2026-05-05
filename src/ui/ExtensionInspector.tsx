@@ -18,10 +18,12 @@ type Props = {
   isExtension: boolean;
   isInspecting: boolean;
   isLearningWebsite: boolean;
+  isRunning: boolean;
   summary?: PageDomSummary;
   onIntentChange: (value: string) => void;
   onInspect: () => void;
   onLearnWebsite: () => void;
+  onRunWorkflow: () => void;
   onSaveSchema: () => void;
   onStartCapture: () => void;
   onStopCapture: () => void;
@@ -41,10 +43,12 @@ export function ExtensionInspector({
   isExtension,
   isInspecting,
   isLearningWebsite,
+  isRunning,
   summary,
   onIntentChange,
   onInspect,
   onLearnWebsite,
+  onRunWorkflow,
   onSaveSchema,
   onStartCapture,
   onStopCapture,
@@ -53,12 +57,13 @@ export function ExtensionInspector({
   const hasWarnings = candidateWarnings.length > 0;
   const showCustomTool = isCapturing || hasWarnings || Boolean(error);
   const compileStatus = isLearningWebsite ? "compiling" : candidateSchema || compiledToolGroup ? "compiled" : "idle";
+  const hasCompiledWorkflow = Boolean(compiledToolGroup);
   const latestMessage = agentMessages[0]?.text;
   const compileStatusText =
     compileStatus === "compiling"
       ? latestMessage ?? "Reading the page and drafting a tool schema."
       : compiledToolGroup
-        ? `Compiled ${compiledToolGroup.tools.length} tools via ${compiledToolGroup.provider === "agent-api" ? "Agent API" : "local fallback"}.`
+        ? `Compiled ${compiledToolGroup.tools.length} reusable tools. Ready to run with saved tools.`
       : compileStatus === "compiled"
         ? latestMessage ?? "Tool schema is ready to save."
         : "Describe the workflow, or leave it blank to use the default compile goal.";
@@ -88,14 +93,32 @@ export function ExtensionInspector({
             placeholder="Leave blank to use the default compile goal."
           />
         </label>
-        <button
-          type="button"
-          className="primary-button full-width"
-          onClick={onLearnWebsite}
-          disabled={!isExtension || isLearningWebsite}
-        >
-          {isLearningWebsite ? "Compiling..." : candidateSchema || compiledToolGroup ? "Confirm and recompile" : "Confirm and compile"}
-        </button>
+        <div className="intent-actions">
+          <button
+            type="button"
+            className="primary-button full-width"
+            onClick={hasCompiledWorkflow ? onRunWorkflow : onLearnWebsite}
+            disabled={!isExtension || isLearningWebsite || isRunning}
+          >
+            {isLearningWebsite
+              ? "Compiling..."
+              : hasCompiledWorkflow
+                ? isRunning
+                  ? "Running..."
+                  : "Run with saved tools"
+                : "Confirm and compile"}
+          </button>
+          {hasCompiledWorkflow && (
+            <button
+              type="button"
+              className="secondary-button full-width"
+              onClick={onLearnWebsite}
+              disabled={!isExtension || isLearningWebsite || isRunning}
+            >
+              Recompile tools
+            </button>
+          )}
+        </div>
       </div>
 
       {candidateSchema && (

@@ -47,6 +47,8 @@ async function callCompiler(body) {
     "You are the Graft Guard Agent Compiler.",
     "Read the user's goal and the page summary, then produce an AgentDraft JSON object.",
     "You are not responsible for browser replay selectors. Graft Guard will compile your semantic draft into executable tools.",
+    "If you are confident about selectors and tool boundaries, you may instead return a complete GraftToolGroup JSON object with name, description, tools, workflowPlan, and riskNotes.",
+    "Each GraftToolGroup tool must include name, description, risk, inputSchema, and replayPlan.",
     "AgentDraft shape:",
     "{",
     '  "goal": string,',
@@ -90,9 +92,6 @@ async function callCompiler(body) {
 
 function normalizeCompilerResponse(parsed, body) {
   const isVendorWorkflow = isVendorPaymentSummary(body?.pageSummary);
-  if (isVendorWorkflow && !isVendorPaymentToolGroup(parsed)) {
-    return buildVendorPaymentToolGroup(parsed, body);
-  }
 
   if (isGraftToolGroup(parsed)) {
     return {
@@ -110,21 +109,6 @@ function normalizeCompilerResponse(parsed, body) {
   }
 
   return buildGenericToolGroup(parsed, body);
-}
-
-function isVendorPaymentToolGroup(value) {
-  if (!isGraftToolGroup(value)) {
-    return false;
-  }
-
-  const toolNames = new Set(value.tools.map((tool) => tool.name));
-  return (
-    toolNames.has("searchInvoices") &&
-    toolNames.has("openInvoice") &&
-    toolNames.has("extractPaymentPacket") &&
-    value.tools.some((tool) => tool.name === "exportBankDetails" && tool.risk === "export") &&
-    value.workflowPlan.every((step) => toolNames.has(step.tool))
-  );
 }
 
 function isGraftToolGroup(value) {
