@@ -62,16 +62,11 @@ export function ExtensionInspector({
     <section className="extension-inspector" aria-label="Compile website">
       <header className="plugin-topbar">
         <div>
-          <p>Graft Guard</p>
-          <h2>Compile website tool</h2>
+          <p>Workflow compiler</p>
+          <h2>Graft Guard</h2>
         </div>
         <button type="button" className="api-plan-button">API plan</button>
       </header>
-
-      <div className="section-heading">
-        <h3>Compile website</h3>
-        <span>{isExtension ? "workflow compiler" : "standalone demo"}</span>
-      </div>
 
       <div className={`compile-status compile-status-${compileStatus}`}>
         {isLearningWebsite && <span className="loading-dot" aria-hidden="true" />}
