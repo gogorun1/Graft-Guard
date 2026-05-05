@@ -262,6 +262,128 @@ button {
   white-space: nowrap;
 }
 
+.agent-stream {
+  display: grid;
+  gap: 8px;
+  margin: 0 18px 12px;
+  border: 1px solid #d9e2ea;
+  border-radius: 8px;
+  background: #f5f8fb;
+  padding: 10px;
+}
+
+.extension-inspector .agent-stream {
+  margin: 0 0 12px;
+}
+
+.agent-stream-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #536577;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.agent-stream-heading small,
+.agent-earlier-button {
+  border: 0;
+  background: transparent;
+  color: #7a8896;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: none;
+  padding: 0;
+}
+
+.agent-stream-list {
+  display: grid;
+  gap: 7px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.agent-message {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 8px;
+  border: 1px solid #dce5ec;
+  border-radius: 7px;
+  background: #ffffff;
+  padding: 8px;
+}
+
+.agent-message-compile {
+  border-left: 3px solid #7b61ff;
+}
+
+.agent-message-replay {
+  border-left: 3px solid #1d8c5a;
+}
+
+.agent-message-idle {
+  border-left: 3px solid #4f89b8;
+}
+
+.agent-message-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #edf3f7;
+  font-size: 14px;
+}
+
+.agent-message-body {
+  min-width: 0;
+}
+
+.agent-message-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+  color: #647385;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.agent-message-meta time {
+  flex: 0 0 auto;
+  color: #8a96a3;
+}
+
+.agent-message p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: #1c2d3d;
+  font-size: 12px;
+  font-weight: 700;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.agent-detail-toggle {
+  border: 0;
+  background: transparent;
+  color: #126b82;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 4px 0 0;
+}
+
+.agent-message-detail {
+  overflow-wrap: anywhere;
+  margin-top: 5px;
+  color: #536679;
+  font-size: 11px;
+}
+
 .panel-section {
   padding: 16px 18px;
   border-bottom: 1px solid #e2e6ea;
@@ -337,8 +459,20 @@ button {
 }
 
 .tool-list small {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
   color: #607080;
   font-weight: 800;
+}
+
+.tool-cache-badge {
+  border-radius: 999px;
+  background: #eef6f1;
+  color: #1d6f4b;
+  padding: 2px 6px;
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .schema-viewer code,
@@ -502,8 +636,27 @@ textarea {
 }
 
 .audit-timeline small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: #7b8793;
   font-size: 11px;
+}
+
+.audit-badge {
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-size: 10px;
+}
+
+.audit-badge-ai {
+  background: #f0edff;
+  color: #5a43c6;
+}
+
+.audit-badge-local {
+  background: #eaf7ef;
+  color: #1d6f4b;
 }
 
 .extension-inspector {

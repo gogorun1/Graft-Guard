@@ -15,9 +15,29 @@ export function AuditTimeline({ events }: Props) {
         <li key={event.id}>
           <time>{new Date(event.timestamp).toLocaleTimeString()}</time>
           <span>{event.message}</span>
-          <small>LLM calls: {event.llmCalls}</small>
+          <small>
+            <AuditBadge event={event} />
+            LLM calls: {event.llmCalls}
+          </small>
         </li>
       ))}
     </ol>
   );
+}
+
+function AuditBadge({ event }: { event: AuditEvent }) {
+  const badge = auditBadge(event);
+  return <b className={`audit-badge audit-badge-${badge.kind}`}>{badge.label}</b>;
+}
+
+function auditBadge(event: AuditEvent): { kind: "ai" | "local"; label: string } {
+  if (event.llmCalls > 0) {
+    return { kind: "ai", label: "AI-assisted" };
+  }
+
+  if (event.type === "learned_tool" && !/cached|saved/i.test(event.message)) {
+    return { kind: "ai", label: "AI-assisted" };
+  }
+
+  return { kind: "local", label: "Local" };
 }

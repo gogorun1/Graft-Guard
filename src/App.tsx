@@ -8,6 +8,12 @@ import {
   stopActivePageCapture,
 } from "./extension/targetPageClient";
 import type { CapturedStep, PageDomSummary } from "./extension/pageSummary";
+import {
+  narrateAgentEvent,
+  type AgentMessage,
+  type AgentNarratorEvent,
+  type AgentNarratorInput,
+} from "./graft/agentNarrator";
 import { createAuditEvent, type AuditEvent } from "./graft/auditLog";
 import {
   compileCapturedWorkflow,
@@ -37,6 +43,7 @@ export default function App() {
   const [command, setCommand] = useState(presetCommand);
   const [websiteIntent, setWebsiteIntent] = useState("Create a tool to submit this form");
   const [toolParams, setToolParams] = useState<Record<string, string>>({});
+  const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval>();
   const [replayTrace, setReplayTrace] = useState<ReplayTrace[]>([]);
@@ -73,12 +80,64 @@ export default function App() {
     });
   }, [selectedSchema]);
 
+  useEffect(() => {
+    if (!isExtension) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function inspectOnOpen() {
+      try {
+        const summary = await collectActivePageSummary();
+        if (cancelled) {
+          return;
+        }
+
+        setPageSummary(summary);
+        const pageSchemas = loadPageSchemas(summary);
+        setSchemas(pageSchemas);
+        setSelectedToolName(pageSchemas[0]?.name ?? "queryOrders");
+        addAgentMessage({ type: "page_observed", summary });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : "Active page inspection failed";
+        setInspectionError(message);
+        addAgentMessage({ type: "replay_failed", message });
+      }
+    }
+
+    void inspectOnOpen();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isExtension]);
+
   function addAudit(event: Omit<AuditEvent, "id" | "timestamp">) {
     setAuditEvents((current) => [createAuditEvent(event), ...current]);
   }
 
+  function addAgentMessage(event: AgentNarratorInput) {
+    const message = narrateAgentEvent({
+      ...event,
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+    } as AgentNarratorEvent);
+
+    if (!message) {
+      return;
+    }
+
+    setAgentMessages((current) => [message, ...current].slice(0, 10));
+  }
+
   async function handleLearn() {
     setIsLearning(true);
+    addAgentMessage({ type: "compile_started" });
     try {
       const compiled = await compileApp({
         appName: "Acme ERP Order Management v3.2",
@@ -95,6 +154,12 @@ export default function App() {
 
       setSchemas(compiled);
       setSelectedToolName("queryOrders");
+      addAgentMessage({
+        type: "compile_succeeded",
+        schema: compiled[0],
+        warnings: [],
+        source: "demo",
+      });
       addAudit({
         type: "learned_tool",
         toolName: "queryOrders",
@@ -130,6 +195,7 @@ export default function App() {
       const pageSchemas = loadPageSchemas(summary);
       setSchemas(pageSchemas);
       setSelectedToolName(pageSchemas[0]?.name ?? "queryOrders");
+      addAgentMessage({ type: "page_observed", summary });
       addAudit({
         type: "learned_tool",
         message: `Inspected ${summary.inputs.length} inputs, ${summary.buttons.length} buttons, ${summary.tables.length} tables on ${summary.origin}`,
@@ -156,12 +222,20 @@ export default function App() {
     try {
       const summary = await collectActivePageSummary();
       setPageSummary(summary);
+      addAgentMessage({ type: "compile_started", summary });
       const pageSchemas = loadPageSchemas(summary);
       setSchemas(pageSchemas);
 
       const candidate = compileWebsiteIntent(websiteIntent, summary);
       setCandidateTool(candidate);
       setSelectedToolName(candidate.schema.name);
+      addAgentMessage({
+        type: "compile_succeeded",
+        schema: candidate.schema,
+        warnings: candidate.warnings,
+        summary,
+        source: "website",
+      });
       addAudit({
         type: "learned_tool",
         toolName: candidate.schema.name,
@@ -190,6 +264,7 @@ export default function App() {
     try {
       await startActivePageCapture();
       setIsCapturing(true);
+      addAgentMessage({ type: "capture_started" });
       addAudit({
         type: "replay_started",
         message: "Workflow capture started on active page",
@@ -220,6 +295,7 @@ export default function App() {
       setCandidateTool(candidate);
       setSelectedToolName(candidate.schema.name);
       setIsCapturing(false);
+      addAgentMessage({ type: "capture_completed", steps, candidate });
       addAudit({
         type: "replay_completed",
         toolName: candidate.schema.name,
@@ -244,6 +320,13 @@ export default function App() {
       const candidate = compileCapturedWorkflow(capturedSteps, pageSummary);
       setCandidateTool(candidate);
       setSelectedToolName(candidate.schema.name);
+      addAgentMessage({
+        type: "compile_succeeded",
+        schema: candidate.schema,
+        warnings: candidate.warnings,
+        summary: pageSummary,
+        source: "capture",
+      });
       addAudit({
         type: "learned_tool",
         toolName: candidate.schema.name,
@@ -297,6 +380,13 @@ export default function App() {
       const params = invocation.params;
       setReplayTrace([]);
       setReplayResult(undefined);
+      addAgentMessage({
+        type: "command_parsed",
+        toolName: schema.name,
+        params,
+        usedAi: activeParserLabel().includes("MiniMax"),
+      });
+      addAgentMessage({ type: "tool_run_queued", schema, params });
       addAudit({
         type: "replay_started",
         toolName: schema.name,
@@ -339,6 +429,7 @@ export default function App() {
     const params = collectSchemaParams(selectedSchema, toolParams);
     setReplayTrace([]);
     setReplayResult(undefined);
+    addAgentMessage({ type: "tool_run_queued", schema: selectedSchema, params });
 
     if (requiresApproval(selectedSchema.risk)) {
       setPendingApproval({ schema: selectedSchema, params });
@@ -371,6 +462,7 @@ export default function App() {
       message: "Approval allowed once",
       llmCalls: 0,
     });
+    addAgentMessage({ type: "approval_granted", schema });
     await executeReplay(schema, params);
   }
 
@@ -431,6 +523,7 @@ export default function App() {
       }
 
       setReplayResult(result);
+      addAgentMessage({ type: "replay_completed", schema, result });
       addAudit({
         type: "replay_completed",
         toolName: schema.name,
@@ -448,6 +541,11 @@ export default function App() {
         llmCalls: 0,
       });
     } catch (error) {
+      addAgentMessage({
+        type: "replay_failed",
+        schema,
+        message: error instanceof Error ? error.message : "Replay failed",
+      });
       addAudit({
         type: "replay_failed",
         toolName: schema.name,
@@ -468,6 +566,7 @@ export default function App() {
         {isExtension && (
           <ExtensionInspector
             advancedOpen={advancedOpen}
+            agentMessages={agentMessages}
             capturedSteps={capturedSteps}
             candidateSchema={candidateTool?.schema}
             candidateWarnings={candidateTool?.warnings ?? []}
@@ -488,6 +587,7 @@ export default function App() {
           />
         )}
         <GraftPanel
+          agentMessages={agentMessages}
           auditEvents={auditEvents}
           command={command}
           isExtension={isExtension}

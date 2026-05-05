@@ -1,9 +1,12 @@
 import type { CapturedStep, PageDomSummary } from "../extension/pageSummary";
+import type { AgentMessage as AgentMessageModel } from "../graft/agentNarrator";
 import { schemaSignature } from "../graft/schemaCompiler";
 import type { ToolSchema } from "../graft/schemaTypes";
+import { AgentMessageStream } from "./AgentMessageStream";
 
 type Props = {
   advancedOpen: boolean;
+  agentMessages: AgentMessageModel[];
   capturedSteps: CapturedStep[];
   candidateSchema?: ToolSchema;
   candidateWarnings: string[];
@@ -25,6 +28,7 @@ type Props = {
 
 export function ExtensionInspector({
   advancedOpen,
+  agentMessages,
   capturedSteps,
   candidateSchema,
   candidateWarnings,
@@ -52,6 +56,8 @@ export function ExtensionInspector({
         <h3>Learn website</h3>
         <span>{isExtension ? "AI-assisted compile" : "standalone demo"}</span>
       </div>
+
+      <AgentMessageStream messages={agentMessages} />
 
       <label className="intent-field">
         Describe what you want to automate

@@ -2,8 +2,10 @@ import { AuditTimeline } from "./AuditTimeline";
 import { ApprovalCard } from "./ApprovalCard";
 import { SchemaViewer } from "./SchemaViewer";
 import { schemaSignature } from "../graft/schemaCompiler";
+import type { AgentMessage as AgentMessageModel } from "../graft/agentNarrator";
 import type { AuditEvent } from "../graft/auditLog";
 import type { ReplayResult, ReplayTrace, ToolSchema } from "../graft/schemaTypes";
+import { AgentMessageStream } from "./AgentMessageStream";
 
 type PendingApproval = {
   schema: ToolSchema;
@@ -11,6 +13,7 @@ type PendingApproval = {
 };
 
 type Props = {
+  agentMessages: AgentMessageModel[];
   auditEvents: AuditEvent[];
   command: string;
   isExtension: boolean;
@@ -34,6 +37,7 @@ type Props = {
 };
 
 export function GraftPanel({
+  agentMessages,
   auditEvents,
   command,
   isExtension,
@@ -77,6 +81,8 @@ export function GraftPanel({
         </section>
       )}
 
+      {!isExtension && <AgentMessageStream messages={agentMessages} />}
+
       <section className="panel-section">
         <div className="section-heading">
           <h3>Learned tools</h3>
@@ -91,7 +97,10 @@ export function GraftPanel({
               onClick={() => onSelectSchema(schema)}
             >
               <span>{schema.name}</span>
-              <small>{schema.risk}</small>
+              <small>
+                <b className="tool-cache-badge">{isExtension ? "Cached tool" : "AI-compiled tool"}</b>
+                {schema.risk}
+              </small>
             </button>
           ))}
           {schemas.length === 0 && (
