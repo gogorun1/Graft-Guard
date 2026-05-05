@@ -331,6 +331,7 @@ button {
 .graft-panel {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   max-height: 100vh;
   overflow: auto;
   border-left: 1px solid #c4cad0;
@@ -477,6 +478,7 @@ button {
 }
 
 .panel-section {
+  min-width: 0;
   padding: 16px 18px;
   border-bottom: 1px solid #e2e6ea;
 }
@@ -485,6 +487,7 @@ button {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
   margin-bottom: 10px;
 }
 
@@ -570,6 +573,8 @@ button {
 .schema-viewer code,
 .approval-card code {
   display: block;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
   border: 1px solid #d8e0e7;
   border-radius: 6px;
@@ -581,6 +586,8 @@ button {
 }
 
 .schema-viewer pre {
+  max-width: 100%;
+  min-width: 0;
   overflow: auto;
   max-height: 220px;
   margin: 8px 0 0;
@@ -796,6 +803,7 @@ textarea {
 
 .compiled-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   min-width: 0;
 }
@@ -820,6 +828,7 @@ textarea {
 .compiled-workflow-card {
   display: grid;
   gap: 4px;
+  min-width: 0;
   margin-bottom: 10px;
   border: 1px solid #b7d8e1;
   border-radius: 8px;
@@ -846,6 +855,7 @@ textarea {
 .compiled-workflow-group {
   display: grid;
   gap: 6px;
+  min-width: 0;
   margin-top: 8px;
 }
 
@@ -864,6 +874,8 @@ textarea {
 }
 
 .compiled-tool-pills span {
+  max-width: 100%;
+  overflow: hidden;
   border: 1px solid #c7dbe2;
   border-radius: 999px;
   background: #fff;
@@ -872,6 +884,7 @@ textarea {
   font-family: SFMono-Regular, Consolas, monospace;
   font-size: 10px;
   font-weight: 800;
+  text-overflow: ellipsis;
 }
 
 .compiled-step-list {
@@ -895,6 +908,12 @@ textarea {
   font-family: SFMono-Regular, Consolas, monospace;
   font-size: 11px;
   font-weight: 800;
+  min-width: 0;
+}
+
+.compiled-step-list li span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .compiled-step-list b {
@@ -918,6 +937,7 @@ textarea {
   justify-content: space-between;
   gap: 10px;
   width: 100%;
+  min-width: 0;
   border: 1px solid #d4e3e8;
   border-radius: 6px;
   background: #fff;
@@ -941,15 +961,18 @@ textarea {
   color: #142536;
   font-family: SFMono-Regular, Consolas, monospace;
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .generated-tool-list small {
   color: #607080;
   font-size: 11px;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .generated-tool-list b {
+  flex-shrink: 0;
   border-radius: 999px;
   background: #eef6f1;
   color: #1d6f4b;
@@ -961,6 +984,7 @@ textarea {
 .generated-tool-schema {
   display: grid;
   gap: 8px;
+  min-width: 0;
   margin-top: 10px;
   border-top: 1px solid #d4e3e8;
   padding-top: 10px;
