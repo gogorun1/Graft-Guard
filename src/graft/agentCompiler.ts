@@ -22,25 +22,44 @@ export type CompiledToolGroup = {
 
 export type AgentCompilerInput = {
   prompt: string;
-  pageSummary: PageDomSummary;
+  pageSummary?: PageDomSummary;
   existingTools?: ToolSchema[];
   missingCapabilities?: string[];
+  inspectActivePage?: () => Promise<PageDomSummary>;
+  onActivity?: (message: string) => void;
 };
 
 type AgentCompilerResponse = Omit<CompiledToolGroup, "provider">;
+type LocalAgentCompilerInput = AgentCompilerInput & {
+  pageSummary: PageDomSummary;
+};
+type AgentCompilerToolResult = {
+  id: string;
+  name: string;
+  result: PageDomSummary;
+};
+type AgentCompilerToolRequest = {
+  toolRequest: {
+    id: string;
+    name: string;
+    args?: Record<string, unknown>;
+    message?: string;
+  };
+};
+type AgentCompilerProxyResponse = AgentCompilerResponse | AgentCompilerToolRequest;
 
 export async function compileToolGroupWithAgent(input: AgentCompilerInput): Promise<CompiledToolGroup> {
   if (configuredAgentProvider() === "minimax" && miniMaxProxyUrl()) {
     try {
-      const response = await callAgentCompiler(input);
+      const response = await compileWithAgentToolLoop(input);
       validateCompiledToolGroup(response);
       return { ...dedupeExistingTools(response, input), provider: "agent-api" };
     } catch (error) {
-      return compileLocalToolGroup(input, error);
+      return compileLocalToolGroup({ ...input, pageSummary: await resolvePageSummary(input) }, error);
     }
   }
 
-  return compileLocalToolGroup(input);
+  return compileLocalToolGroup({ ...input, pageSummary: await resolvePageSummary(input) });
 }
 
 export function isVendorPaymentPage(summary: PageDomSummary): boolean {
@@ -92,8 +111,60 @@ export function compileLocalVendorPaymentGroup(
   };
 }
 
+async function compileWithAgentToolLoop(input: AgentCompilerInput): Promise<AgentCompilerResponse> {
+  let pageSummary = input.pageSummary;
+  const toolResults: AgentCompilerToolResult[] = [];
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    input.onActivity?.(
+      pageSummary
+        ? "Sending inspected page summary to MiniMax"
+        : "Sending compile goal and available tools to MiniMax",
+    );
+
+    const response = await callAgentCompiler({
+      ...input,
+      pageSummary,
+      toolResults,
+    });
+
+    if (!isToolRequest(response)) {
+      return response;
+    }
+
+    if (response.toolRequest.name !== "inspect_active_page") {
+      throw new Error(`MiniMax requested unsupported tool: ${response.toolRequest.name}`);
+    }
+
+    input.onActivity?.("MiniMax requested inspect_active_page");
+    pageSummary = await resolvePageSummary(input);
+    toolResults.push({
+      id: response.toolRequest.id,
+      name: response.toolRequest.name,
+      result: pageSummary,
+    });
+    input.onActivity?.(
+      `inspect_active_page returned ${pageSummary.inputs.length} inputs, ${pageSummary.buttons.length} buttons, and ${pageSummary.tables.length} tables`,
+    );
+  }
+
+  throw new Error("MiniMax did not finish compiling after inspect_active_page.");
+}
+
+async function resolvePageSummary(input: AgentCompilerInput): Promise<PageDomSummary> {
+  if (input.pageSummary) {
+    return input.pageSummary;
+  }
+
+  if (!input.inspectActivePage) {
+    throw new Error("Active page inspection tool is not available.");
+  }
+
+  return input.inspectActivePage();
+}
+
 function compileLocalToolGroup(
-  input: AgentCompilerInput,
+  input: LocalAgentCompilerInput,
   fallbackReason?: unknown,
 ): CompiledToolGroup {
   if (input.missingCapabilities?.length) {
@@ -120,7 +191,9 @@ function compileLocalToolGroup(
   };
 }
 
-async function callAgentCompiler(input: AgentCompilerInput): Promise<AgentCompilerResponse> {
+async function callAgentCompiler(
+  input: AgentCompilerInput & { toolResults?: AgentCompilerToolResult[] },
+): Promise<AgentCompilerProxyResponse> {
   const response = await fetch(`${miniMaxProxyUrl()}/compile-tool-group`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -129,6 +202,13 @@ async function callAgentCompiler(input: AgentCompilerInput): Promise<AgentCompil
       pageSummary: input.pageSummary,
       existingTools: summarizeExistingTools(input.existingTools ?? []),
       missingCapabilities: input.missingCapabilities ?? [],
+      toolResults: input.toolResults ?? [],
+      tools: [
+        {
+          name: "inspect_active_page",
+          description: "Inspect the active browser tab and return a compact DOM summary for workflow compilation.",
+        },
+      ],
       model: import.meta.env.VITE_MINIMAX_MODEL,
     }),
   });
@@ -137,7 +217,11 @@ async function callAgentCompiler(input: AgentCompilerInput): Promise<AgentCompil
     throw new Error(`Agent compiler failed: ${response.status}`);
   }
 
-  return response.json() as Promise<AgentCompilerResponse>;
+  return response.json() as Promise<AgentCompilerProxyResponse>;
+}
+
+function isToolRequest(response: AgentCompilerProxyResponse): response is AgentCompilerToolRequest {
+  return "toolRequest" in response;
 }
 
 function dedupeExistingTools(

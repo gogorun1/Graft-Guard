@@ -60,7 +60,7 @@ export function ExtensionInspector({
       : compiledToolGroup
         ? `${compiledToolGroup.tools.length} tools saved`
         : compileStatus === "compiled"
-          ? "Recorded tool ready to save"
+        ? "Recorded tool ready to save"
           : "No tools saved yet";
 
   return (

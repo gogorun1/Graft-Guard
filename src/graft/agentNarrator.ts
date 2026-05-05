@@ -1,4 +1,5 @@
 import type { CapturedStep, PageDomSummary } from "../extension/pageSummary";
+import type { CompiledToolGroup } from "./agentCompiler";
 import type { CandidateTool } from "./capturedWorkflowCompiler";
 import type { ReplayResult, RiskLevel, ToolSchema } from "./schemaTypes";
 
@@ -17,6 +18,14 @@ export type AgentMessage = {
 export type AgentNarratorEvent =
   | { id: string; timestamp: number; type: "page_observed"; summary: PageDomSummary }
   | { id: string; timestamp: number; type: "compile_started"; summary?: PageDomSummary }
+  | {
+      id: string;
+      timestamp: number;
+      type: "compile_stage";
+      stage: "send_to_compiler" | "normalize_draft" | "attach_guard";
+      summary?: PageDomSummary;
+    }
+  | { id: string; timestamp: number; type: "compile_group_succeeded"; group: CompiledToolGroup; summary: PageDomSummary }
   | {
       id: string;
       timestamp: number;
@@ -54,8 +63,54 @@ export function narrateAgentEvent(event: AgentNarratorEvent): AgentMessage | nul
     return message(event, {
       icon: "brain",
       phase: "compile",
-      text: "Compiling this page into a reusable tool.",
-      detail: event.summary ? `Found inputs: ${summarizeInputs(event.summary)}` : "Using the known Acme ERP workflow.",
+      text: "Reading the page structure and workflow goal.",
+      detail: event.summary
+        ? `Observed ${event.summary.inputs.length} inputs, ${event.summary.buttons.length} actions, and ${event.summary.tables.length} tables: ${summarizeInputs(event.summary)}.`
+        : "MiniMax can request browser tools before drafting the workflow.",
+    });
+  }
+
+  if (event.type === "compile_stage") {
+    if (event.stage === "send_to_compiler") {
+      return message(event, {
+        icon: "brain",
+        phase: "compile",
+        text: "Sending the goal and browser tool manifest to the compiler.",
+        detail: "MiniMax can call inspect_active_page; Graft Guard executes browser inspection locally.",
+      });
+    }
+
+    if (event.stage === "normalize_draft") {
+      return message(event, {
+        icon: "search",
+        phase: "compile",
+        text: "Normalizing the agent draft into reusable typed tools.",
+        detail: "Mapping semantic capabilities to stable tool names, parameters, risks, and replay plans.",
+      });
+    }
+
+    return message(event, {
+      icon: "warning",
+      phase: "compile",
+      text: "Checking the workflow for guarded actions.",
+      detail: "Exports, destructive actions, and sensitive business data are marked for approval before replay.",
+    });
+  }
+
+  if (event.type === "compile_group_succeeded") {
+    const riskyTools = event.group.tools.filter((tool) => tool.risk !== "read");
+    const provider = event.group.provider === "agent-api" ? "MiniMax" : "local fallback";
+    const workflow = event.group.workflowPlan.map((step) => step.tool).join(" -> ");
+    const riskText =
+      riskyTools.length > 0
+        ? `Flagged ${riskyTools.map((tool) => `${tool.name} as ${tool.risk}`).join(", ")}.`
+        : "No risky actions found.";
+
+    return message(event, {
+      icon: riskyTools.length > 0 ? "warning" : "check",
+      phase: "compile",
+      text: `${provider} compiled ${event.group.tools.length} typed tools from this page.`,
+      detail: `Workflow: ${workflow}. ${riskText}`,
     });
   }
 

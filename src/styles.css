@@ -433,7 +433,10 @@ button {
 }
 
 .agent-message {
-  display: block;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 7px;
+  align-items: start;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -443,6 +446,12 @@ button {
 .agent-message-compact {
   opacity: 0.72;
   padding: 2px 0;
+}
+
+.agent-message-compact .agent-message-icon {
+  width: 17px;
+  height: 17px;
+  font-size: 8px;
 }
 
 .agent-message-compact p {
@@ -467,6 +476,73 @@ button {
   min-width: 0;
 }
 
+.agent-message-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  border: 1px solid #cfd8e1;
+  border-radius: 999px;
+  background: #f6f9fb;
+  color: #526273;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.agent-message-icon-brain {
+  border-color: #c8c1f3;
+  background: #f2f0ff;
+  color: #5a43c6;
+}
+
+.agent-message-icon-bolt,
+.agent-message-icon-check {
+  border-color: #b9dec8;
+  background: #eef9f2;
+  color: #1d6f4b;
+}
+
+.agent-message-icon-warning,
+.agent-message-icon-error {
+  border-color: #e8c4a4;
+  background: #fff5eb;
+  color: #9a4c13;
+}
+
+.agent-message-icon-eye,
+.agent-message-icon-search {
+  border-color: #b9d5e2;
+  background: #edf7fb;
+  color: #126b82;
+}
+
+.agent-phase-badge {
+  display: inline-block;
+  width: max-content;
+  margin-bottom: 3px;
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.agent-phase-badge-compile {
+  background: #f0edff;
+  color: #5a43c6;
+}
+
+.agent-phase-badge-replay {
+  background: #eaf7ef;
+  color: #1d6f4b;
+}
+
+.agent-phase-badge-idle {
+  background: #eef3f7;
+  color: #526273;
+}
+
 .agent-message p {
   display: -webkit-box;
   overflow: hidden;
@@ -476,6 +552,17 @@ button {
   font-weight: 650;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.agent-message small {
+  display: block;
+  overflow: hidden;
+  margin-top: 3px;
+  color: #6b7885;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .panel-section {
@@ -813,17 +900,71 @@ textarea {
   font-weight: 800;
 }
 
-.compile-activity ol {
+.compile-activity-list {
   display: grid;
-  gap: 6px;
-  margin: 9px 0 0;
-  padding-left: 18px;
+  gap: 7px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
 }
 
-.compile-activity li {
+.compile-activity-list li {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 8px;
+  align-items: start;
+  border: 1px solid transparent;
+  border-radius: 7px;
   color: #405064;
+  padding: 6px 7px;
   font-size: 12px;
   font-weight: 700;
+  line-height: 1.35;
+  animation: compile-step-reveal 220ms ease-out;
+}
+
+.compile-activity-list li.active {
+  border-color: #9fd0dc;
+  background: #fff;
+  color: #1d3d4d;
+  box-shadow: 0 6px 16px rgba(18, 107, 130, 0.12);
+}
+
+.compile-activity-list li.complete {
+  color: #526273;
+}
+
+.compile-step-marker {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-top: 4px;
+  border: 2px solid #9fb0bd;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.compile-activity-list li.active .compile-step-marker {
+  border-color: #126b82;
+  background: #126b82;
+  box-shadow: 0 0 0 4px rgba(18, 107, 130, 0.13);
+}
+
+.compile-activity-list li.complete .compile-step-marker {
+  border-color: #2d8a5f;
+  background: #2d8a5f;
+}
+
+@keyframes compile-step-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .compiled-section-heading {
@@ -1758,7 +1899,8 @@ textarea {
   margin-bottom: 0;
 }
 
-.candidate-schema code {
+.candidate-schema code,
+.suggested-signatures code {
   display: block;
   overflow-x: auto;
   border: 1px solid #d6e2e8;
@@ -1768,6 +1910,18 @@ textarea {
   padding: 8px;
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 12px;
+}
+
+.suggested-signatures {
+  display: grid;
+  gap: 6px;
+}
+
+.agent-reason {
+  margin: 0;
+  color: #31465a;
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .warning-list {

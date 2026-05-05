@@ -32,6 +32,7 @@ import {
 } from "./graft/agentCompiler";
 import {
   finishVendorPaymentWorkflow,
+  startCompiledVendorPaymentWorkflow,
   startVendorPaymentWorkflow,
   type PaymentPacket,
   type VendorAgentEvent,
@@ -49,7 +50,6 @@ import { ExtensionInspector } from "./ui/ExtensionInspector";
 
 const presetCommand = "Prepare a vendor payment packet for all overdue invoices above EUR 5,000, but do not export bank details without approval.";
 const defaultWebsiteIntent = presetCommand;
-const fakeCompileDelayMs = 2000;
 const simulatedRunDelayMs = 1200;
 
 type PendingApproval = {
@@ -89,8 +89,12 @@ export default function App() {
   const [inspectionError, setInspectionError] = useState<string>();
 
   const selectedSchema = useMemo(
-    () => schemas.find((schema) => schema.name === selectedToolName) ?? schemas[0],
-    [schemas, selectedToolName],
+    () =>
+      schemas.find((schema) => schema.name === selectedToolName) ??
+      compiledToolGroup?.tools.find((schema) => schema.name === selectedToolName) ??
+      schemas[0] ??
+      compiledToolGroup?.tools[0],
+    [compiledToolGroup, schemas, selectedToolName],
   );
 
   const taskPlan = useMemo(
@@ -264,38 +268,57 @@ export default function App() {
     setCompileActivity([
       isMissingCompile
         ? `Planning delta compile against ${schemas.length} saved tools`
-        : "Inspecting the active page",
+        : "Starting MiniMax compile with browser tools",
     ]);
 
     try {
-      const summary = await collectActivePageSummary();
-      setPageSummary(summary);
-      addAgentMessage({ type: "compile_started", summary });
-      addCompileActivity(`Observed ${summary.inputs.length} inputs, ${summary.buttons.length} buttons, and ${summary.tables.length} tables`);
+      let inspectedSummary: PageDomSummary | undefined;
+      addAgentMessage({ type: "compile_started" });
       if (isMissingCompile) {
         addCompileActivity(`Reusing ${taskPlan.reusedTools.length} existing tools`);
         addCompileActivity(`Compiling ${taskPlan.missingCapabilities.length} missing capabilities`);
-      } else {
-        addCompileActivity("Preparing AgentDraft request from prompt and page summary");
       }
-      await sleep(fakeCompileDelayMs);
-      addCompileActivity("Calling Agent Compiler and waiting for semantic draft");
 
       const effectiveIntent = websiteIntent.trim() || defaultWebsiteIntent;
       setCommand(effectiveIntent);
       setWorkflowInputs(inferWorkflowRunInputs(effectiveIntent, workflowInputs));
       const group = await compileToolGroupWithAgent({
         prompt: effectiveIntent,
-        pageSummary: summary,
+        inspectActivePage: async () => {
+          setIsInspecting(true);
+          try {
+            const summary = await collectActivePageSummary();
+            inspectedSummary = summary;
+            setPageSummary(summary);
+            addAgentMessage({ type: "compile_started", summary });
+            return summary;
+          } finally {
+            setIsInspecting(false);
+          }
+        },
+        onActivity: (message) => {
+          addCompileActivity(message);
+          if (message.startsWith("Sending compile goal")) {
+            addAgentMessage({ type: "compile_stage", stage: "send_to_compiler", summary: inspectedSummary });
+          }
+          if (message.startsWith("Sending inspected page summary")) {
+            addAgentMessage({ type: "compile_stage", stage: "normalize_draft", summary: inspectedSummary });
+          }
+        },
         existingTools: isMissingCompile ? schemas : [],
         missingCapabilities: isMissingCompile ? taskPlan.missingCapabilities : [],
       });
+      const summary = inspectedSummary ?? pageSummary;
+      if (!summary) {
+        throw new Error("Agent compiler finished without an inspected page summary.");
+      }
       addCompileActivity(
         group.provider === "agent-api"
           ? "Received AgentDraft from MiniMax API"
           : "Used local compiler fallback",
       );
       addCompileActivity(`Normalized draft into ${group.tools.length} reusable tools`);
+      addAgentMessage({ type: "compile_stage", stage: "attach_guard", summary });
       addCompileActivity(`Validated ${group.workflowPlan.length} planned workflow steps`);
       const savedTools = isMissingCompile ? mergeToolSchemas(schemas, group.tools) : group.tools;
       replacePageSchemas(summary, savedTools);
@@ -311,11 +334,12 @@ export default function App() {
       });
       setSchemas(savedTools);
       setSelectedToolName(group.tools[0]?.name ?? savedTools[0]?.name ?? "generatedTool");
+      addAgentMessage({ type: "compile_group_succeeded", group, summary });
       addAudit({
         type: "learned_tool",
         toolName: group.name,
         risk: "read",
-        message: `Compiled ${group.name} by ${group.provider === "agent-api" ? "Agent API" : "local fallback"}`,
+        message: `Suggested ${group.name} by ${group.provider === "agent-api" ? "MiniMax" : "local fallback"}`,
         llmCalls: group.provider === "agent-api" ? 1 : 0,
       });
     } catch (error) {
@@ -444,7 +468,7 @@ export default function App() {
       return;
     }
 
-    if (isVendorPaymentRequest(command) && (!isExtension || compiledToolGroup)) {
+    if (isVendorPaymentRequest(command) && (!isExtension || isVendorPaymentGroup(compiledToolGroup))) {
       await runVendorPaymentWorkflow();
       return;
     }
@@ -624,7 +648,9 @@ export default function App() {
 
     try {
       await sleep(simulatedRunDelayMs);
-      const run = startVendorPaymentWorkflow(command, workflowInputs);
+      const run = isVendorPaymentGroup(compiledToolGroup)
+        ? startCompiledVendorPaymentWorkflow(compiledToolGroup, command, workflowInputs)
+        : startVendorPaymentWorkflow(command, workflowInputs);
       setVendorAgentEvents(run.events);
 
       for (const event of run.events) {
@@ -1014,6 +1040,15 @@ function sleep(ms: number) {
 function isVendorPaymentRequest(command: string): boolean {
   const normalized = command.toLowerCase();
   return normalized.includes("payment packet") || normalized.includes("overdue invoice");
+}
+
+function isVendorPaymentGroup(group?: CompiledToolGroup): group is CompiledToolGroup {
+  if (!group) {
+    return false;
+  }
+
+  const tools = new Set(group.tools.map((tool) => tool.name));
+  return tools.has("searchInvoices") && tools.has("exportBankDetails");
 }
 
 function toolNameForVendorEvent(event: VendorAgentEvent): string {

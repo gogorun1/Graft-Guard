@@ -1,4 +1,5 @@
 import { mockInvoices, type Invoice } from "../demo-erp/mockOrders";
+import type { CompiledToolGroup, WorkflowPlanStep } from "./agentCompiler";
 import type { WorkflowRunInputs } from "./workflowPlanner";
 
 export type PaymentPacketInvoice = {
@@ -19,6 +20,7 @@ export type PaymentPacket = {
 };
 
 export type VendorAgentEvent =
+  | { type: "plan_selected"; tool: string; message: string }
   | { type: "tool_call"; tool: string; message: string }
   | { type: "tool_result"; tool: string; message: string }
   | { type: "guard_required"; tool: "exportBankDetails"; invoiceIds: string[]; message: string }
@@ -40,50 +42,27 @@ export function parseVendorPaymentRequest(request: string): { status: WorkflowRu
 }
 
 export function startVendorPaymentWorkflow(request: string, inputs?: WorkflowRunInputs): VendorAgentRun {
-  const parsed = parseVendorPaymentRequest(request);
-  const status = inputs?.status ?? parsed.status;
-  const minAmount = inputs?.minAmount ?? parsed.minAmount;
-  const riskFilter = inputs?.riskFilter ?? "all";
-  const invoices = searchInvoices(status, minAmount, riskFilter);
-  const details = invoices.map((invoice) => openInvoice(invoice.invoiceId));
-  const invoiceIds = details.map((invoice) => invoice.invoiceId);
-
-  return {
-    guardInvoiceIds: invoiceIds,
-    events: [
+  return runVendorPaymentSteps(
+    [
       {
-        type: "tool_call",
         tool: "searchInvoices",
-        message: `Searching ${status} invoices above EUR ${minAmount.toLocaleString("en-US")}${riskFilterSearchText(riskFilter)}`,
       },
-      {
-        type: "tool_result",
-        tool: "searchInvoices",
-        message: `${invoices.length} invoices scanned`,
-      },
-      {
-        type: "tool_call",
-        tool: "openInvoice",
-        message: `Opening ${details.length} invoice details`,
-      },
-      {
-        type: "tool_result",
-        tool: "openInvoice",
-        message: `${details.length} invoice details opened`,
-      },
-      {
-        type: "tool_call",
-        tool: "extractPaymentPacket",
-        message: "Preparing payment packet summary",
-      },
-      {
-        type: "guard_required",
-        tool: "exportBankDetails",
-        invoiceIds,
-        message: `Bank details require approval for ${invoiceIds.length} invoices`,
-      },
+      { tool: "openInvoice", forEach: "searchInvoices.result" },
+      { tool: "extractPaymentPacket", args: { invoiceIds: "$openedInvoices" } },
+      { tool: "exportBankDetails", args: { invoiceIds: "$openedInvoices" }, guard: true },
     ],
-  };
+    request,
+    undefined,
+    inputs,
+  );
+}
+
+export function startCompiledVendorPaymentWorkflow(
+  group: CompiledToolGroup,
+  request: string,
+  inputs?: WorkflowRunInputs,
+): VendorAgentRun {
+  return runVendorPaymentSteps(group.workflowPlan, request, group, inputs);
 }
 
 export function finishVendorPaymentWorkflow(invoiceIds: string[], includeBankDetails: boolean): VendorAgentRun {
@@ -194,4 +173,179 @@ function buildPaymentPacket(invoices: Invoice[], includeBankDetails: boolean): P
       .map((invoice) => invoice.invoiceId),
     bankDetailsStatus: includeBankDetails ? "included" : "redacted",
   };
+}
+
+type VendorWorkflowState = {
+  searchedInvoices: Invoice[];
+  openedInvoices: Invoice[];
+};
+
+function runVendorPaymentSteps(
+  steps: WorkflowPlanStep[],
+  request: string,
+  group?: CompiledToolGroup,
+  inputs?: WorkflowRunInputs,
+): VendorAgentRun {
+  const events: VendorAgentEvent[] = [];
+  const state: VendorWorkflowState = {
+    searchedInvoices: [],
+    openedInvoices: [],
+  };
+
+  if (group) {
+    events.push({
+      type: "plan_selected",
+      tool: group.name,
+      message: `Running ${group.workflowPlan.length} planned steps compiled by ${group.provider === "agent-api" ? "MiniMax" : "local fallback"}`,
+    });
+  }
+
+  for (const step of steps) {
+    if (step.guard && step.tool === "exportBankDetails") {
+      const invoiceIds = resolveInvoiceIds(step, state);
+      events.push({
+        type: "guard_required",
+        tool: "exportBankDetails",
+        invoiceIds,
+        message: `Bank details require approval for ${invoiceIds.length} invoices`,
+      });
+      return { events, guardInvoiceIds: invoiceIds };
+    }
+
+    runVendorTool(step, request, state, events, inputs);
+  }
+
+  return { events };
+}
+
+function runVendorTool(
+  step: WorkflowPlanStep,
+  request: string,
+  state: VendorWorkflowState,
+  events: VendorAgentEvent[],
+  inputs?: WorkflowRunInputs,
+): void {
+  if (step.tool === "searchInvoices") {
+    const args = searchInvoiceArgs(step, request, inputs);
+    events.push({
+      type: "tool_call",
+      tool: "searchInvoices",
+      message: `Searching ${args.status} invoices above EUR ${args.minAmount.toLocaleString("en-US")}${riskFilterSearchText(args.riskFilter)}`,
+    });
+    state.searchedInvoices = searchInvoices(args.status, args.minAmount, args.riskFilter);
+    events.push({
+      type: "tool_result",
+      tool: "searchInvoices",
+      message: `${state.searchedInvoices.length} invoices scanned`,
+    });
+    return;
+  }
+
+  if (step.tool === "openInvoice") {
+    const invoiceIds = resolveInvoiceIds(step, state);
+    events.push({
+      type: "tool_call",
+      tool: "openInvoice",
+      message: `openInvoice for ${invoiceIds.length} invoices`,
+    });
+    state.openedInvoices = invoiceIds.map((invoiceId) => openInvoice(invoiceId));
+    events.push({
+      type: "tool_result",
+      tool: "openInvoice",
+      message: `${state.openedInvoices.length} invoice details opened`,
+    });
+    return;
+  }
+
+  if (step.tool === "extractPaymentPacket") {
+    const invoiceIds = resolveInvoiceIds(step, state);
+    events.push({
+      type: "tool_call",
+      tool: "extractPaymentPacket",
+      message: `extractPaymentPacket(invoiceIds=${invoiceIds.join(",")})`,
+    });
+    const packet = buildPaymentPacket(invoiceIds.map((invoiceId) => openInvoice(invoiceId)), false);
+    events.push({
+      type: "tool_result",
+      tool: "extractPaymentPacket",
+      message: `payment packet prepared for EUR ${packet.totalAmount.toLocaleString("en-US")}; bank details pending Guard`,
+    });
+    return;
+  }
+
+  events.push({
+    type: "tool_result",
+    tool: step.tool,
+    message: `Skipped unsupported vendor workflow tool: ${step.tool}`,
+  });
+}
+
+function searchInvoiceArgs(
+  step: WorkflowPlanStep,
+  request: string,
+  inputs?: WorkflowRunInputs,
+): { status: WorkflowRunInputs["status"]; minAmount: number; riskFilter: WorkflowRunInputs["riskFilter"] } {
+  const parsed = parseVendorPaymentRequest(request);
+  const minAmount = numberArg(step.args?.minAmount) ?? inputs?.minAmount ?? parsed.minAmount;
+  const status = statusArg(step.args?.status) ?? inputs?.status ?? parsed.status;
+  const riskFilter = riskFilterArg(step.args?.riskFilter) ?? inputs?.riskFilter ?? "all";
+  return { status, minAmount, riskFilter };
+}
+
+function resolveInvoiceIds(step: WorkflowPlanStep, state: VendorWorkflowState): string[] {
+  const explicit = parseInvoiceIds(step.args?.invoiceIds);
+  if (explicit.length > 0 && !explicit.some((invoiceId) => invoiceId.startsWith("$"))) {
+    return explicit;
+  }
+
+  if (step.forEach === "searchInvoices.result") {
+    return state.searchedInvoices.map((invoice) => invoice.invoiceId);
+  }
+
+  if (state.openedInvoices.length > 0) {
+    return state.openedInvoices.map((invoice) => invoice.invoiceId);
+  }
+
+  return state.searchedInvoices.map((invoice) => invoice.invoiceId);
+}
+
+function parseInvoiceIds(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map(String).filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value.split(",").map((invoiceId) => invoiceId.trim()).filter(Boolean);
+  }
+
+  return [];
+}
+
+function numberArg(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/,/g, ""));
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
+}
+
+function statusArg(value: unknown): WorkflowRunInputs["status"] | undefined {
+  return value === "all" || value === "overdue" || value === "pending" || value === "paid"
+    ? value
+    : undefined;
+}
+
+function riskFilterArg(value: unknown): WorkflowRunInputs["riskFilter"] | undefined {
+  return value === "all" ||
+    value === "none" ||
+    value === "review" ||
+    value === "blocked" ||
+    value === "flagged"
+    ? value
+    : undefined;
 }

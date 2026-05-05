@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AuditTimeline } from "./AuditTimeline";
 import { ApprovalCard } from "./ApprovalCard";
 import { SchemaViewer } from "./SchemaViewer";
@@ -82,7 +82,14 @@ export function GraftPanel({
   const [compiledTab, setCompiledTab] = useState<"workflow" | "tools">("workflow");
   const [compileActivityOpen, setCompileActivityOpen] = useState(false);
   const [compileElapsedSeconds, setCompileElapsedSeconds] = useState(0);
+  const [visibleCompileStepCount, setVisibleCompileStepCount] = useState(0);
+  const compileActivityStartRef = useRef<string | undefined>(undefined);
+  const compileActivityLengthRef = useRef(0);
   const showCompiledArea = isCompilingWebsite || compileActivity.length > 0 || Boolean(compiledToolGroup);
+  const visibleCompileActivity = compileActivity.slice(0, visibleCompileStepCount);
+  const isRevealingCompileSteps = visibleCompileStepCount < compileActivity.length;
+  const activeCompileStepIndex = Math.max(0, visibleCompileStepCount - 1);
+  const showCompiledResult = Boolean(compiledToolGroup) && !isCompilingWebsite && !isRevealingCompileSteps;
 
   useEffect(() => {
     if (isCompilingWebsite) {
@@ -94,6 +101,38 @@ export function GraftPanel({
       setCompileActivityOpen(false);
     }
   }, [isCompilingWebsite, compiledToolGroup]);
+
+  useEffect(() => {
+    const previousLength = compileActivityLengthRef.current;
+    compileActivityLengthRef.current = compileActivity.length;
+
+    if (compileActivity.length === 0) {
+      compileActivityStartRef.current = undefined;
+      setVisibleCompileStepCount(0);
+      return;
+    }
+
+    if (
+      compileActivityStartRef.current !== compileActivity[0] ||
+      (isCompilingWebsite && compileActivity.length === 1 && previousLength > 1)
+    ) {
+      compileActivityStartRef.current = compileActivity[0];
+      setVisibleCompileStepCount(0);
+    }
+  }, [compileActivity, isCompilingWebsite]);
+
+  useEffect(() => {
+    if (compileActivity.length === 0 || visibleCompileStepCount >= compileActivity.length) {
+      return;
+    }
+
+    const revealDelay = visibleCompileStepCount === 0 ? 120 : 360;
+    const timer = window.setTimeout(() => {
+      setVisibleCompileStepCount((current) => Math.min(current + 1, compileActivity.length));
+    }, revealDelay);
+
+    return () => window.clearTimeout(timer);
+  }, [compileActivity.length, visibleCompileStepCount]);
 
   useEffect(() => {
     if (!isCompilingWebsite) {
@@ -165,28 +204,34 @@ export function GraftPanel({
                   onToggle={(event) => setCompileActivityOpen(event.currentTarget.open)}
                 >
                   <summary>
-                    <span>{isCompilingWebsite ? "Agent is compiling" : "Agent compile log"}</span>
+                    <span>{isCompilingWebsite || isRevealingCompileSteps ? "Agent is compiling" : "Agent compile log"}</span>
                     <small>{compileActivity.length} steps</small>
                   </summary>
-                  <ol>
-                    {compileActivity.map((event, index) => (
-                      <li key={`${event}-${index}`}>{event}</li>
+                  <ol className="compile-activity-list">
+                    {visibleCompileActivity.map((event, index) => (
+                      <li
+                        key={`${event}-${index}`}
+                        className={index === activeCompileStepIndex && isRevealingCompileSteps ? "active" : "complete"}
+                      >
+                        <span className="compile-step-marker" aria-hidden="true" />
+                        <span>{event}</span>
+                      </li>
                     ))}
                   </ol>
                 </details>
               )}
 
-              {isCompilingWebsite && !compiledToolGroup && (
+              {(isCompilingWebsite || isRevealingCompileSteps) && (
                 <div className="workflow-run-loading compile-loading">
                   <span className="loading-dot" aria-hidden="true" />
                   <span>
-                    {compileActivity[compileActivity.length - 1] ?? "Compiling this page into reusable tools."}
+                    {visibleCompileActivity[visibleCompileActivity.length - 1] ?? "Compiling this page into reusable tools."}
                     {compileElapsedSeconds > 0 ? ` (${compileElapsedSeconds}s)` : ""}
                   </span>
                 </div>
               )}
 
-              {compiledToolGroup && (
+              {showCompiledResult && compiledToolGroup && (
                 <>
                   <strong>{compiledToolGroup.name}</strong>
                   <span>{compiledToolGroup.description}</span>
@@ -655,6 +700,7 @@ function ToolLibrarySection({
 
 function eventLabel(type: VendorAgentEvent["type"]): string {
   const labels: Record<VendorAgentEvent["type"], string> = {
+    plan_selected: "Plan",
     tool_call: "Tool call",
     tool_result: "Result",
     guard_required: "Guard",

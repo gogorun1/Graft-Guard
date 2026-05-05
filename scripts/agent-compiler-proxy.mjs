@@ -43,9 +43,14 @@ server.listen(port, "127.0.0.1", () => {
 });
 
 async function callCompiler(body) {
+  const toolResults = Array.isArray(body.toolResults) ? body.toolResults : [];
+  const inspectResult = toolResults.find((result) => result?.name === "inspect_active_page" && result?.result);
+  const effectiveBody = inspectResult ? { ...body, pageSummary: inspectResult.result } : body;
+  const shouldRequestInspect = !effectiveBody.pageSummary && toolResults.length === 0 && hasInspectTool(body);
   const prompt = [
-    "You are the Graft Guard Agent Compiler.",
-    "Read the user's goal and the page summary, then produce an AgentDraft JSON object.",
+    shouldRequestInspect
+      ? "Read the user's goal, then call inspect_active_page before producing the AgentDraft."
+      : "Read the user's goal and the page summary, then produce an AgentDraft JSON object.",
     "You are not responsible for browser replay selectors. Graft Guard will compile your semantic draft into executable tools.",
     "If you are confident about selectors and tool boundaries, you may instead return a complete GraftToolGroup JSON object with name, description, tools, workflowPlan, and riskNotes.",
     "Each GraftToolGroup tool must include name, description, risk, inputSchema, and replayPlan.",
@@ -65,17 +70,35 @@ async function callCompiler(body) {
     "Output JSON only if possible. If your provider emits reasoning, still include a parseable JSON object.",
     "",
     "User prompt:",
-    body.prompt,
+    effectiveBody.prompt,
     "",
-    "Page summary:",
-    JSON.stringify(body.pageSummary, null, 2),
+    shouldRequestInspect ? "Page summary is not available yet. Call inspect_active_page." : "Page summary:",
+    shouldRequestInspect ? "" : JSON.stringify(effectiveBody.pageSummary, null, 2),
+    "",
+    "Tool results:",
+    JSON.stringify(toolResults, null, 2),
     "",
     "Existing saved tools:",
-    JSON.stringify(body.existingTools ?? [], null, 2),
+    JSON.stringify(effectiveBody.existingTools ?? [], null, 2),
     "",
     "Missing capabilities to compile:",
-    JSON.stringify(body.missingCapabilities ?? [], null, 2),
+    JSON.stringify(effectiveBody.missingCapabilities ?? [], null, 2),
   ].join("\n");
+
+  const requestBody = {
+    model: body.model ?? model,
+    messages: [
+      { role: "system", name: "Graft Guard", content: "You are the Graft Guard Agent Compiler. Return compact JSON for workflow compilation." },
+      { role: "user", name: "User", content: prompt },
+    ],
+    temperature: 0.1,
+    max_completion_tokens: 2048,
+  };
+
+  if (shouldRequestInspect) {
+    requestBody.tools = [inspectActivePageToolDefinition()];
+    requestBody.tool_choice = { type: "function", function: { name: "inspect_active_page" } };
+  }
 
   const upstream = await fetch(apiUrl, {
     method: "POST",
@@ -83,11 +106,7 @@ async function callCompiler(body) {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      model: body.model ?? model,
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.1,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!upstream.ok) {
@@ -95,8 +114,47 @@ async function callCompiler(body) {
   }
 
   const payload = await upstream.json();
+  const toolRequest = extractToolRequest(payload);
+  if (toolRequest) {
+    return { toolRequest };
+  }
+
+  if (shouldRequestInspect) {
+    const text = extractTextMaybe(payload) ?? "";
+    const textToolRequest = parseTextToolRequest(text);
+    return { toolRequest: textToolRequest ?? defaultInspectToolRequest() };
+  }
+
   const text = extractText(payload);
-  return normalizeCompilerResponse(parseJsonResponse(text), body);
+  return normalizeCompilerResponse(parseJsonResponse(text), effectiveBody);
+}
+
+function hasInspectTool(body) {
+  return (body?.tools ?? []).some((tool) => tool?.name === "inspect_active_page");
+}
+
+function inspectActivePageToolDefinition() {
+  return {
+    type: "function",
+    function: {
+      name: "inspect_active_page",
+      description: "Inspect the active browser tab and return page title, URL, origin, forms, inputs, buttons, and tables.",
+      parameters: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+    },
+  };
+}
+
+function defaultInspectToolRequest() {
+  return {
+    id: `tool_${Date.now()}`,
+    name: "inspect_active_page",
+    args: {},
+    message: "MiniMax needs the active page summary before compiling.",
+  };
 }
 
 function normalizeCompilerResponse(parsed, body) {
@@ -666,7 +724,72 @@ function inferMinAmount(prompt) {
   return Number.isFinite(minAmount) ? minAmount : 5000;
 }
 
+function extractToolRequest(payload) {
+  const toolCall = payload?.choices?.[0]?.message?.tool_calls?.[0];
+  if (toolCall?.function?.name) {
+    return {
+      id: toolCall.id ?? `tool_${Date.now()}`,
+      name: toolCall.function.name,
+      args: parseJsonMaybe(toolCall.function.arguments) ?? {},
+      message: "MiniMax requested a browser tool before compiling.",
+    };
+  }
+
+  const legacyFunctionCall = payload?.choices?.[0]?.message?.function_call;
+  if (legacyFunctionCall?.name) {
+    return {
+      id: `tool_${Date.now()}`,
+      name: legacyFunctionCall.name,
+      args: parseJsonMaybe(legacyFunctionCall.arguments) ?? {},
+      message: "MiniMax requested a browser function before compiling.",
+    };
+  }
+
+  return undefined;
+}
+
+function parseTextToolRequest(text) {
+  const parsed = parseJsonMaybe(text);
+  const candidate = parsed?.toolRequest ?? parsed?.tool_call ?? parsed?.function_call ?? parsed;
+  const name = candidate?.name ?? candidate?.function?.name ?? candidate?.tool;
+
+  if (name !== "inspect_active_page") {
+    return undefined;
+  }
+
+  return {
+    id: candidate?.id ?? `tool_${Date.now()}`,
+    name,
+    args: candidate?.args ?? parseJsonMaybe(candidate?.function?.arguments) ?? {},
+    message: "MiniMax requested inspect_active_page before compiling.",
+  };
+}
+
+function parseJsonMaybe(value) {
+  if (!value) {
+    return undefined;
+  }
+
+  if (typeof value === "object") {
+    return value;
+  }
+
+  try {
+    return JSON.parse(extractFirstJsonObject(String(value)));
+  } catch {
+    return undefined;
+  }
+}
+
 function extractText(payload) {
+  const text = extractTextMaybe(payload);
+  if (!text) {
+    throw new Error("MiniMax response did not include text content.");
+  }
+  return text;
+}
+
+function extractTextMaybe(payload) {
   const candidates = [
     payload?.choices?.[0]?.message?.content,
     payload?.choices?.[0]?.text,
@@ -675,11 +798,7 @@ function extractText(payload) {
     payload?.text,
   ];
 
-  const text = candidates.find((item) => typeof item === "string" && item.trim().length > 0);
-  if (!text) {
-    throw new Error("MiniMax response did not include text content.");
-  }
-  return text;
+  return candidates.find((item) => typeof item === "string" && item.trim().length > 0);
 }
 
 function parseJsonResponse(text) {
