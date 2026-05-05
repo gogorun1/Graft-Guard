@@ -6,6 +6,7 @@ import type {
   PageDomSummary,
   PageFormSummary,
   PageInputSummary,
+  PageRegionSummary,
   PageTableSummary,
 } from "./pageSummary";
 import type { ReplayResult, ReplayStep, ReplayTrace } from "../graft/schemaTypes";
@@ -13,6 +14,9 @@ import type { ReplayResult, ReplayStep, ReplayTrace } from "../graft/schemaTypes
 let isCapturing = false;
 let capturedSteps: CapturedStep[] = [];
 let lastInputBySelector = new Map<string, CapturedStep>();
+
+type InputLikeElement = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLElement;
+type TableLikeElement = HTMLTableElement | HTMLElement;
 
 void resumeCaptureIfSessionActive();
 
@@ -70,7 +74,7 @@ function handleCapturedInput(event: Event) {
 
   const target = event.target;
 
-  if (!isInputElement(target) || isSensitiveInput(target)) {
+  if (!isEditableElement(target) || isSensitiveInput(target)) {
     return;
   }
 
@@ -102,7 +106,9 @@ function handleCapturedClick(event: MouseEvent) {
     return;
   }
 
-  const target = event.target.closest<HTMLElement>("button, input[type='button'], input[type='submit'], a[href]");
+  const target = event.target.closest<HTMLElement>(
+    "button, input[type='button'], input[type='submit'], a[href], [role='button'], [role='menuitem'], [role='option'], [role='tab'], [aria-haspopup], summary",
+  );
   if (!target || !isVisible(target)) {
     return;
   }
@@ -198,7 +204,7 @@ async function replayToolOnPage(
 }
 
 function setElementValue(element: Element, value: unknown) {
-  if (!(element instanceof HTMLElement) || !isInputElement(element)) {
+  if (!(element instanceof HTMLElement) || !isEditableElement(element)) {
     throw new Error(`Replay target is not an input: ${elementToSelectorLabel(element)}`);
   }
 
@@ -206,8 +212,18 @@ function setElementValue(element: Element, value: unknown) {
     element.checked = value === true || value === "true" || value === "checked" || value === "on";
   } else if (element instanceof HTMLInputElement) {
     element.value = normalizeInputValue(element, value);
-  } else {
+  } else if (element instanceof HTMLSelectElement || element instanceof HTMLTextAreaElement) {
     element.value = String(value ?? "");
+  } else if (["checkbox", "radio", "switch"].includes(element.getAttribute("role") ?? "")) {
+    const desired = value === true || value === "true" || value === "checked" || value === "on";
+    const current = element.getAttribute("aria-checked") === "true";
+    if (desired !== current) {
+      element.click();
+    }
+  } else if (element.isContentEditable || ["textbox", "searchbox", "combobox", "spinbutton"].includes(element.getAttribute("role") ?? "")) {
+    element.textContent = String(value ?? "");
+  } else {
+    throw new Error(`Replay target is not editable: ${elementToSelectorLabel(element)}`);
   }
 
   element.dispatchEvent(new Event("input", { bubbles: true }));
@@ -285,66 +301,112 @@ function elementToSelectorLabel(element: Element): string {
 }
 
 function collectPageSummary(): PageDomSummary {
-  const inputs = visibleElements<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
-    "input, select, textarea",
+  const inputs = visibleElements<InputLikeElement>(
+    [
+      "input",
+      "select",
+      "textarea",
+      "[contenteditable='true']",
+      "[role='textbox']",
+      "[role='searchbox']",
+      "[role='combobox']",
+      "[role='spinbutton']",
+      "[role='checkbox']",
+      "[role='radio']",
+      "[role='switch']",
+    ].join(", "),
   )
     .filter((input) => !isSensitiveInput(input))
     .slice(0, 80)
     .map(summarizeInput);
 
-  const buttons = visibleElements<HTMLButtonElement | HTMLInputElement | HTMLAnchorElement>(
-    "button, input[type='button'], input[type='submit'], a[href]",
+  const buttons = visibleElements<HTMLElement>(
+    [
+      "button",
+      "input[type='button']",
+      "input[type='submit']",
+      "a[href]",
+      "[role='button']",
+      "[role='menuitem']",
+      "[role='option']",
+      "[role='tab']",
+      "[aria-haspopup]",
+      "summary",
+    ].join(", "),
   )
     .slice(0, 80)
     .map(summarizeButton)
     .filter((button) => button.text.length > 0);
 
-  const tables = visibleElements<HTMLTableElement>("table").slice(0, 20).map(summarizeTable);
+  const tables = visibleElements<TableLikeElement>("table, [role='table'], [role='grid']").slice(0, 20).map(summarizeTable);
   const forms = visibleElements<HTMLFormElement>("form").slice(0, 30).map(summarizeForm);
+  const regions = visibleElements<HTMLElement>(
+    [
+      "main",
+      "nav",
+      "aside",
+      "section",
+      "[role='main']",
+      "[role='navigation']",
+      "[role='dialog']",
+      "[role='region']",
+      "[role='search']",
+      "[role='form']",
+      "[role='toolbar']",
+      "[role='listbox']",
+      "[role='menu']",
+    ].join(", "),
+  )
+    .slice(0, 30)
+    .map(summarizeRegion)
+    .filter((region) => region.textPreview.length > 0 || Boolean(region.label));
 
   return {
     title: document.title || "(untitled page)",
     url: window.location.href,
     origin: window.location.origin,
-    fingerprint: createFingerprint(inputs, buttons, tables),
+    fingerprint: createFingerprint(inputs, buttons, tables, regions),
     forms,
     inputs,
     buttons,
     tables,
+    regions,
   };
 }
 
-function summarizeInput(
-  element: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
-): PageInputSummary {
+function summarizeInput(element: InputLikeElement): PageInputSummary {
   return {
     selector: bestSelector(element),
     label: findLabel(element),
     type: inputType(element),
+    role: element.getAttribute("role") ?? undefined,
     name: element.getAttribute("name") ?? undefined,
     placeholder: element.getAttribute("placeholder") ?? undefined,
-    required: element.hasAttribute("required"),
+    required: element.hasAttribute("required") || element.getAttribute("aria-required") === "true",
+    options: summarizeInputOptions(element),
   };
 }
 
-function summarizeButton(element: HTMLButtonElement | HTMLInputElement | HTMLAnchorElement): PageButtonSummary {
+function summarizeButton(element: HTMLElement): PageButtonSummary {
   return {
     selector: bestSelector(element),
     text: visibleText(element),
     type: element.getAttribute("type") ?? undefined,
+    role: element.getAttribute("role") ?? undefined,
   };
 }
 
-function summarizeTable(table: HTMLTableElement): PageTableSummary {
-  const headers = Array.from(table.querySelectorAll("thead th, tr:first-child th, tr:first-child td"))
+function summarizeTable(table: TableLikeElement): PageTableSummary {
+  const headers = Array.from(table.querySelectorAll("thead th, [role='columnheader'], tr:first-child th, tr:first-child td, [role='row']:first-child [role='cell']"))
     .map((cell) => cleanText(cell.textContent ?? ""))
     .filter(Boolean)
     .slice(0, 20);
 
+  const semanticRows = table.querySelectorAll("[role='row']").length;
   return {
     selector: bestSelector(table),
     headers,
-    rowCount: table.querySelectorAll("tbody tr").length || Math.max(0, table.querySelectorAll("tr").length - 1),
+    rowCount: table.querySelectorAll("tbody tr").length || Math.max(0, table.querySelectorAll("tr").length - 1) || Math.max(0, semanticRows - 1),
   };
 }
 
@@ -356,8 +418,30 @@ function summarizeForm(form: HTMLFormElement): PageFormSummary {
   };
 }
 
+function summarizeRegion(element: HTMLElement): PageRegionSummary {
+  return {
+    selector: bestSelector(element),
+    role: element.getAttribute("role") ?? element.tagName.toLowerCase(),
+    label: findLabel(element),
+    textPreview: previewText(element),
+  };
+}
+
 function visibleElements<T extends HTMLElement>(selector: string): T[] {
-  return Array.from(document.querySelectorAll<T>(selector)).filter(isVisible);
+  return querySelectorAllDeep<T>(selector).filter(isVisible);
+}
+
+function querySelectorAllDeep<T extends HTMLElement>(selector: string, root: Document | ShadowRoot = document): T[] {
+  const matches = Array.from(root.querySelectorAll<T>(selector));
+  const shadowHosts = Array.from(root.querySelectorAll<HTMLElement>("*")).filter((element) => element.shadowRoot);
+
+  for (const host of shadowHosts) {
+    if (host.shadowRoot) {
+      matches.push(...querySelectorAllDeep<T>(selector, host.shadowRoot));
+    }
+  }
+
+  return matches;
 }
 
 function isVisible(element: HTMLElement): boolean {
@@ -366,43 +450,114 @@ function isVisible(element: HTMLElement): boolean {
   return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
 }
 
-function isInputElement(
-  element: HTMLElement,
-): element is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement {
+function isInputElement(element: HTMLElement): element is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement {
   return element instanceof HTMLInputElement || element instanceof HTMLSelectElement || element instanceof HTMLTextAreaElement;
 }
 
-function isSensitiveInput(element: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement): boolean {
+function isEditableElement(element: HTMLElement): boolean {
+  return (
+    isInputElement(element) ||
+    element.isContentEditable ||
+    ["textbox", "searchbox", "combobox", "spinbutton", "checkbox", "radio", "switch"].includes(element.getAttribute("role") ?? "")
+  );
+}
+
+function isSensitiveInput(element: InputLikeElement): boolean {
   if (!(element instanceof HTMLInputElement)) {
-    return false;
+    const metadata = [
+      element.getAttribute("name"),
+      element.id,
+      element.getAttribute("placeholder"),
+      element.getAttribute("aria-label"),
+      element.getAttribute("aria-labelledby"),
+    ].join(" ").toLowerCase();
+    return /token|secret|password|credential|api key|apikey/.test(metadata);
   }
 
   const type = element.type.toLowerCase();
-  const name = `${element.name} ${element.id} ${element.placeholder}`.toLowerCase();
-  return type === "password" || type === "hidden" || /token|secret|password|credential/.test(name);
+  const name = `${element.name} ${element.id} ${element.placeholder} ${element.getAttribute("aria-label") ?? ""}`.toLowerCase();
+  return type === "password" || type === "hidden" || /token|secret|password|credential|api key|apikey/.test(name);
 }
 
-function inputType(element: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement): string {
+function inputType(element: InputLikeElement): string {
   if (element instanceof HTMLInputElement) {
     return element.type || "text";
   }
 
-  return element.tagName.toLowerCase();
+  if (element instanceof HTMLSelectElement) {
+    return "select";
+  }
+
+  if (element instanceof HTMLTextAreaElement) {
+    return "textarea";
+  }
+
+  if (element.isContentEditable) {
+    return "contenteditable";
+  }
+
+  return element.getAttribute("role") ?? element.tagName.toLowerCase();
 }
 
-function previewInputValue(element: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement): string {
+function summarizeInputOptions(element: InputLikeElement): string[] | undefined {
+  if (element instanceof HTMLSelectElement) {
+    return Array.from(element.options)
+      .map((option) => cleanText(option.textContent ?? option.value))
+      .filter(Boolean)
+      .slice(0, 20);
+  }
+
+  if (element.getAttribute("role") !== "combobox") {
+    return undefined;
+  }
+
+  const controls = element.getAttribute("aria-controls");
+  const listbox = controls ? document.getElementById(controls) : undefined;
+  const options = listbox
+    ? Array.from(listbox.querySelectorAll("[role='option']"))
+    : Array.from(document.querySelectorAll("[role='option']")).slice(0, 20);
+
+  const labels = options
+    .map((option) => cleanText(option.textContent ?? option.getAttribute("aria-label") ?? ""))
+    .filter(Boolean)
+    .slice(0, 20);
+
+  return labels.length > 0 ? labels : undefined;
+}
+
+function previewInputValue(element: InputLikeElement): string {
   if (element instanceof HTMLInputElement && (element.type === "checkbox" || element.type === "radio")) {
     return element.checked ? "checked" : "unchecked";
   }
 
-  const value = element.value;
-  return value.length > 80 ? `${value.slice(0, 77)}...` : value;
+  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) {
+    const value = element.value;
+    return value.length > 80 ? `${value.slice(0, 77)}...` : value;
+  }
+
+  if (["checkbox", "radio", "switch"].includes(element.getAttribute("role") ?? "")) {
+    return element.getAttribute("aria-checked") === "true" ? "checked" : "unchecked";
+  }
+
+  const text = cleanText(element.textContent ?? element.getAttribute("aria-valuetext") ?? "");
+  return text.length > 80 ? `${text.slice(0, 77)}...` : text;
 }
 
 function findLabel(element: HTMLElement): string | undefined {
   const aria = element.getAttribute("aria-label");
   if (aria) {
     return cleanText(aria);
+  }
+
+  const labelledBy = element.getAttribute("aria-labelledby");
+  if (labelledBy) {
+    const label = labelledBy
+      .split(/\s+/)
+      .map((id) => document.getElementById(id)?.textContent ?? "")
+      .join(" ");
+    if (cleanText(label)) {
+      return cleanText(label);
+    }
   }
 
   const id = element.getAttribute("id");
@@ -426,7 +581,12 @@ function visibleText(element: HTMLElement): string {
     return cleanText(element.value || element.getAttribute("aria-label") || element.name || element.type);
   }
 
-  return cleanText(element.textContent || element.getAttribute("aria-label") || element.getAttribute("title") || "");
+  return cleanText(element.getAttribute("aria-label") || element.getAttribute("title") || element.textContent || "");
+}
+
+function previewText(element: HTMLElement): string {
+  const text = cleanText(element.getAttribute("aria-label") || element.textContent || "");
+  return text.length > 160 ? `${text.slice(0, 157)}...` : text;
 }
 
 function bestSelector(element: HTMLElement): string {
@@ -435,9 +595,14 @@ function bestSelector(element: HTMLElement): string {
     return `#${cssEscape(id)}`;
   }
 
-  const testId = element.getAttribute("data-testid") || element.getAttribute("data-test");
+  const testId =
+    element.getAttribute("data-testid") ||
+    element.getAttribute("data-test") ||
+    element.getAttribute("data-test-id") ||
+    element.getAttribute("data-cy") ||
+    element.getAttribute("data-qa");
   if (testId) {
-    return `[data-testid="${cssEscape(testId)}"]`;
+    return `[${testAttributeName(element)}="${cssEscape(testId)}"]`;
   }
 
   const name = element.getAttribute("name");
@@ -445,7 +610,21 @@ function bestSelector(element: HTMLElement): string {
     return `${element.tagName.toLowerCase()}[name="${cssEscape(name)}"]`;
   }
 
+  const role = element.getAttribute("role");
+  const aria = element.getAttribute("aria-label");
+  if (role && aria) {
+    return `[role="${cssEscape(role)}"][aria-label="${cssEscape(aria)}"]`;
+  }
+
+  if (aria) {
+    return `${element.tagName.toLowerCase()}[aria-label="${cssEscape(aria)}"]`;
+  }
+
   return cssPath(element);
+}
+
+function testAttributeName(element: HTMLElement): string {
+  return ["data-testid", "data-test", "data-test-id", "data-cy", "data-qa"].find((name) => element.hasAttribute(name)) ?? "data-testid";
 }
 
 function cssPath(element: HTMLElement): string {
@@ -474,12 +653,14 @@ function createFingerprint(
   inputs: PageInputSummary[],
   buttons: PageButtonSummary[],
   tables: PageTableSummary[],
+  regions: PageRegionSummary[] = [],
 ): string {
   const raw = JSON.stringify({
     path: window.location.pathname,
     inputs: inputs.map((input) => [input.selector, input.label, input.type]),
     buttons: buttons.map((button) => [button.selector, button.text]),
     tables: tables.map((table) => [table.selector, table.headers]),
+    regions: regions.map((region) => [region.selector, region.role, region.label]),
   });
 
   let hash = 0;

@@ -28,6 +28,7 @@ export type AgentCompilerInput = {
 };
 
 type AgentCompilerResponse = Omit<CompiledToolGroup, "provider">;
+const defaultAgentCompilerTimeoutMs = 20000;
 
 export async function compileToolGroupWithAgent(input: AgentCompilerInput): Promise<CompiledToolGroup> {
   if (configuredAgentProvider() === "minimax" && miniMaxProxyUrl()) {
@@ -121,23 +122,44 @@ function compileLocalToolGroup(
 }
 
 async function callAgentCompiler(input: AgentCompilerInput): Promise<AgentCompilerResponse> {
-  const response = await fetch(`${miniMaxProxyUrl()}/compile-tool-group`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      prompt: input.prompt,
-      pageSummary: input.pageSummary,
-      existingTools: summarizeExistingTools(input.existingTools ?? []),
-      missingCapabilities: input.missingCapabilities ?? [],
-      model: import.meta.env.VITE_MINIMAX_MODEL,
-    }),
-  });
+  const timeoutMs = compilerTimeoutMs();
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(`${miniMaxProxyUrl()}/compile-tool-group`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: input.prompt,
+        pageSummary: input.pageSummary,
+        existingTools: summarizeExistingTools(input.existingTools ?? []),
+        missingCapabilities: input.missingCapabilities ?? [],
+        model: import.meta.env.VITE_MINIMAX_MODEL,
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(`Agent compiler timed out after ${Math.round(timeoutMs / 1000)}s`);
+    }
+
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     throw new Error(`Agent compiler failed: ${response.status}`);
   }
 
   return response.json() as Promise<AgentCompilerResponse>;
+}
+
+function compilerTimeoutMs(): number {
+  const configured = Number(import.meta.env.VITE_AGENT_COMPILE_TIMEOUT_MS);
+  return Number.isFinite(configured) && configured > 0 ? configured : defaultAgentCompilerTimeoutMs;
 }
 
 function dedupeExistingTools(

@@ -4,15 +4,18 @@ export type PageInputSummary = {
   selector: string;
   label?: string;
   type: string;
+  role?: string;
   name?: string;
   placeholder?: string;
   required: boolean;
+  options?: string[];
 };
 
 export type PageButtonSummary = {
   selector: string;
   text: string;
   type?: string;
+  role?: string;
 };
 
 export type PageTableSummary = {
@@ -27,6 +30,13 @@ export type PageFormSummary = {
   buttonCount: number;
 };
 
+export type PageRegionSummary = {
+  selector: string;
+  role?: string;
+  label?: string;
+  textPreview: string;
+};
+
 export type PageDomSummary = {
   title: string;
   url: string;
@@ -36,6 +46,7 @@ export type PageDomSummary = {
   inputs: PageInputSummary[];
   buttons: PageButtonSummary[];
   tables: PageTableSummary[];
+  regions: PageRegionSummary[];
 };
 
 export type CapturedStep =

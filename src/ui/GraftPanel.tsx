@@ -36,6 +36,7 @@ type Props = {
   toolParams: Record<string, string>;
   vendorAgentEvents: VendorAgentEvent[];
   workflowInputs: WorkflowRunInputs;
+  error?: string;
   onAllow: () => void;
   onCommandChange: (value: string) => void;
   onDeny: () => void;
@@ -68,6 +69,7 @@ export function GraftPanel({
   toolParams,
   vendorAgentEvents,
   workflowInputs,
+  error,
   onAllow,
   onCommandChange,
   onDeny,
@@ -183,6 +185,13 @@ export function GraftPanel({
                     {compileActivity[compileActivity.length - 1] ?? "Compiling this page into reusable tools."}
                     {compileElapsedSeconds > 0 ? ` (${compileElapsedSeconds}s)` : ""}
                   </span>
+                </div>
+              )}
+
+              {!isCompilingWebsite && error && !compiledToolGroup && (
+                <div className="compile-error-state">
+                  <strong>Compile did not finish</strong>
+                  <span>{error}</span>
                 </div>
               )}
 

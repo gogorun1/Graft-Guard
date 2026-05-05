@@ -7,6 +7,7 @@ const port = Number(process.env.PORT ?? 8787);
 const apiKey = process.env.MINIMAX_API_KEY ?? "";
 const apiUrl = process.env.MINIMAX_API_URL ?? "https://api.minimax.io/v1/chat/completions";
 const model = process.env.MINIMAX_MODEL ?? "MiniMax-M2.7";
+const upstreamTimeoutMs = Number(process.env.MINIMAX_TIMEOUT_MS ?? 20000);
 
 const server = http.createServer(async (request, response) => {
   setCors(response);
@@ -77,18 +78,32 @@ async function callCompiler(body) {
     JSON.stringify(body.missingCapabilities ?? [], null, 2),
   ].join("\n");
 
-  const upstream = await fetch(apiUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: body.model ?? model,
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.1,
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), upstreamTimeoutMs);
+  let upstream;
+  try {
+    upstream = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: body.model ?? model,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.1,
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(`MiniMax API timed out after ${Math.round(upstreamTimeoutMs / 1000)}s`);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!upstream.ok) {
     throw new Error(`MiniMax API failed: ${upstream.status}`);

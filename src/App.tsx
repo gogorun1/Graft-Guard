@@ -295,6 +295,9 @@ export default function App() {
           ? "Received AgentDraft from MiniMax API"
           : "Used local compiler fallback",
       );
+      if (group.provider === "local-fallback" && group.riskNotes[0]) {
+        addCompileActivity(group.riskNotes[0]);
+      }
       addCompileActivity(`Normalized draft into ${group.tools.length} reusable tools`);
       addCompileActivity(`Validated ${group.workflowPlan.length} planned workflow steps`);
       const savedTools = isMissingCompile ? mergeToolSchemas(schemas, group.tools) : group.tools;
@@ -798,6 +801,7 @@ export default function App() {
           taskPlan={taskPlan}
           toolParams={toolParams}
           workflowInputs={workflowInputs}
+          error={inspectionError}
           compiledToolGroup={compiledToolGroup}
           vendorAgentEvents={vendorAgentEvents}
           onAllow={handleAllow}

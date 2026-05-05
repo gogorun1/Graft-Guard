@@ -119,6 +119,8 @@ Optional overrides:
 ```bash
 MINIMAX_API_URL=https://api.minimax.io/v1/chat/completions
 MINIMAX_MODEL=MiniMax-M2.7
+MINIMAX_TIMEOUT_MS=20000
+VITE_AGENT_COMPILE_TIMEOUT_MS=20000
 ```
 
 Then start the proxy and frontend in two terminals:

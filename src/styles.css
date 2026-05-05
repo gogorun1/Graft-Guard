@@ -788,6 +788,27 @@ textarea {
   margin-bottom: 10px;
 }
 
+.compile-error-state {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  border: 1px solid #d8c5a0;
+  border-radius: 6px;
+  background: #fffaf0;
+  color: #3c3320;
+  padding: 10px;
+}
+
+.compile-error-state strong {
+  font-size: 13px;
+}
+
+.compile-error-state span {
+  color: #655942;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .compile-activity {
   margin-bottom: 10px;
   border: 1px solid #d7dde3;
