@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { DemoErp } from "./demo-erp/DemoErp";
+import { collectActivePageSummary, isExtensionRuntime } from "./extension/targetPageClient";
+import type { PageDomSummary } from "./extension/pageSummary";
 import { createAuditEvent, type AuditEvent } from "./graft/auditLog";
 import { activeParserLabel, parseNaturalLanguageCommand } from "./graft/commandParser";
 import { compileApp, loadCachedSchemas } from "./graft/schemaCompiler";
@@ -7,6 +9,7 @@ import { replayTool } from "./graft/replayEngine";
 import type { ReplayResult, ReplayTrace, ToolSchema } from "./graft/schemaTypes";
 import { requiresApproval } from "./graft/guardEngine";
 import { GraftPanel } from "./ui/GraftPanel";
+import { ExtensionInspector } from "./ui/ExtensionInspector";
 
 const presetCommand = "Find all orders from last month over 1000 euros";
 
@@ -25,6 +28,10 @@ export default function App() {
   const [replayResult, setReplayResult] = useState<ReplayResult>();
   const [isLearning, setIsLearning] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  const [isInspecting, setIsInspecting] = useState(false);
+  const [pageSummary, setPageSummary] = useState<PageDomSummary>();
+  const [inspectionError, setInspectionError] = useState<string>();
+  const isExtension = isExtensionRuntime();
 
   const selectedSchema = useMemo(
     () => schemas.find((schema) => schema.name === selectedToolName) ?? schemas[0],
@@ -75,6 +82,31 @@ export default function App() {
       });
     } finally {
       setIsLearning(false);
+    }
+  }
+
+  async function handleInspectActivePage() {
+    setIsInspecting(true);
+    setInspectionError(undefined);
+
+    try {
+      const summary = await collectActivePageSummary();
+      setPageSummary(summary);
+      addAudit({
+        type: "learned_tool",
+        message: `Inspected ${summary.inputs.length} inputs, ${summary.buttons.length} buttons, ${summary.tables.length} tables on ${summary.origin}`,
+        llmCalls: 0,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Active page inspection failed";
+      setInspectionError(message);
+      addAudit({
+        type: "replay_failed",
+        message,
+        llmCalls: 0,
+      });
+    } finally {
+      setIsInspecting(false);
     }
   }
 
@@ -206,26 +238,37 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
-      <DemoErp />
-      <GraftPanel
-        auditEvents={auditEvents}
-        command={command}
-        isLearning={isLearning}
-        isRunning={isRunning}
-        pendingApproval={pendingApproval}
-        replayResult={replayResult}
-        replayTrace={replayTrace}
-        schemas={schemas}
-        selectedSchema={selectedSchema}
-        onAllow={handleAllow}
-        onCommandChange={setCommand}
-        onDeny={handleDeny}
-        onLearn={handleLearn}
-        onRun={handleRun}
-        onSelectSchema={(schema) => setSelectedToolName(schema.name)}
-        onUsePreset={() => setCommand(presetCommand)}
-      />
+    <main className={isExtension ? "extension-app-shell" : "app-shell"}>
+      {!isExtension && <DemoErp />}
+      <div className={isExtension ? "extension-panel-stack" : undefined}>
+        {isExtension && (
+          <ExtensionInspector
+            error={inspectionError}
+            isExtension={isExtension}
+            isInspecting={isInspecting}
+            summary={pageSummary}
+            onInspect={handleInspectActivePage}
+          />
+        )}
+        <GraftPanel
+          auditEvents={auditEvents}
+          command={command}
+          isLearning={isLearning}
+          isRunning={isRunning}
+          pendingApproval={pendingApproval}
+          replayResult={replayResult}
+          replayTrace={replayTrace}
+          schemas={schemas}
+          selectedSchema={selectedSchema}
+          onAllow={handleAllow}
+          onCommandChange={setCommand}
+          onDeny={handleDeny}
+          onLearn={handleLearn}
+          onRun={handleRun}
+          onSelectSchema={(schema) => setSelectedToolName(schema.name)}
+          onUsePreset={() => setCommand(presetCommand)}
+        />
+      </div>
     </main>
   );
 }

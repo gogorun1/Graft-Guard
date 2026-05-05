@@ -9,3 +9,34 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+declare const chrome: {
+  runtime: {
+    id?: string;
+    onInstalled: {
+      addListener(listener: () => void): void;
+    };
+    onMessage: {
+      addListener(
+        listener: (
+          message: any,
+          sender: any,
+          sendResponse: (response?: unknown) => void,
+        ) => boolean | void,
+      ): void;
+    };
+  };
+  action: {
+    onClicked: {
+      addListener(listener: (tab: { windowId?: number }) => void): void;
+    };
+  };
+  sidePanel: {
+    setPanelBehavior(options: { openPanelOnActionClick: boolean }): Promise<void>;
+    open(options: { windowId: number }): Promise<void>;
+  };
+  tabs: {
+    query(queryInfo: { active: boolean; currentWindow: boolean }): Promise<Array<{ id?: number }>>;
+    sendMessage(tabId: number, message: unknown): Promise<unknown>;
+  };
+};
