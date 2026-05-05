@@ -31,6 +31,7 @@ import { GraftPanel } from "./ui/GraftPanel";
 import { ExtensionInspector } from "./ui/ExtensionInspector";
 
 const presetCommand = "Find all orders from last month over 1000 euros";
+const defaultWebsiteIntent = "Create a tool to submit this form";
 const fakeCompileDelayMs = 2000;
 
 type PendingApproval = {
@@ -42,7 +43,7 @@ export default function App() {
   const [schemas, setSchemas] = useState<ToolSchema[]>(() => loadCachedSchemas());
   const [selectedToolName, setSelectedToolName] = useState("queryOrders");
   const [command, setCommand] = useState(presetCommand);
-  const [websiteIntent, setWebsiteIntent] = useState("Create a tool to submit this form");
+  const [websiteIntent, setWebsiteIntent] = useState("");
   const [toolParams, setToolParams] = useState<Record<string, string>>({});
   const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
@@ -228,7 +229,8 @@ export default function App() {
       setSchemas(pageSchemas);
       await sleep(fakeCompileDelayMs);
 
-      const candidate = compileWebsiteIntent(websiteIntent, summary);
+      const effectiveIntent = websiteIntent.trim() || defaultWebsiteIntent;
+      const candidate = compileWebsiteIntent(effectiveIntent, summary);
       setCandidateTool(candidate);
       setSelectedToolName(candidate.schema.name);
       addAgentMessage({

@@ -47,7 +47,6 @@ export function ExtensionInspector({
   onStopCapture,
   onToggleAdvanced,
 }: Props) {
-  const [compileMode, setCompileMode] = useState<"default" | "custom">("default");
   const [customToolOpen, setCustomToolOpen] = useState(false);
   const hasWarnings = candidateWarnings.length > 0;
   const showCustomTool = isCapturing || customToolOpen || hasWarnings || Boolean(error);
@@ -59,7 +58,7 @@ export function ExtensionInspector({
       ? latestMessage ?? "Reading the page and drafting a tool schema."
       : compileStatus === "compiled"
         ? latestMessage ?? "Tool schema is ready to save."
-        : "Use the default goal or confirm a custom intent.";
+        : "Describe the workflow, or leave it blank to use the default compile goal.";
 
   return (
     <section className="extension-inspector" aria-label="Compile website">
@@ -82,52 +81,24 @@ export function ExtensionInspector({
         <span>{compileStatusText}</span>
       </div>
 
-      <div className="compile-tabs" role="tablist" aria-label="Compile mode">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={compileMode === "default"}
-          className={compileMode === "default" ? "selected" : ""}
-          onClick={() => setCompileMode("default")}
-        >
-          Quick compile
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={compileMode === "custom"}
-          className={compileMode === "custom" ? "selected" : ""}
-          onClick={() => setCompileMode("custom")}
-        >
-          Custom intent
-        </button>
-      </div>
-
-      {compileMode === "default" ? (
+      <div className="intent-panel">
+        <label className="intent-field">
+          Describe what you want to automate
+          <textarea
+            value={intent}
+            onChange={(event) => onIntentChange(event.target.value)}
+            placeholder="Leave blank to use the default compile goal."
+          />
+        </label>
         <button
           type="button"
           className="primary-button full-width"
           onClick={onLearnWebsite}
           disabled={!isExtension || isLearningWebsite}
         >
-          {isLearningWebsite ? "Compiling..." : candidateSchema ? "Recompile website" : "Compile website"}
+          {isLearningWebsite ? "Compiling..." : candidateSchema ? "Confirm and recompile" : "Confirm and compile"}
         </button>
-      ) : (
-        <div className="intent-panel">
-          <label className="intent-field">
-            Describe what you want to automate
-            <textarea value={intent} onChange={(event) => onIntentChange(event.target.value)} />
-          </label>
-          <button
-            type="button"
-            className="primary-button full-width"
-            onClick={onLearnWebsite}
-            disabled={!isExtension || isLearningWebsite || intent.trim().length === 0}
-          >
-            {isLearningWebsite ? "Compiling..." : "Confirm intent and compile"}
-          </button>
-        </div>
-      )}
+      </div>
 
       {candidateSchema && (
         <div className="candidate-schema">
