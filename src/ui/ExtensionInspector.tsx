@@ -82,13 +82,6 @@ export function ExtensionInspector({
         <span>{compileStatusText}</span>
       </div>
 
-      {summary && (
-        <div className="learned-page-chip">
-          <strong>{summary.title}</strong>
-          <span>{summary.origin}</span>
-        </div>
-      )}
-
       <div className="compile-tabs" role="tablist" aria-label="Compile mode">
         <button
           type="button"
