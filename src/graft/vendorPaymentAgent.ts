@@ -1,4 +1,5 @@
 import { mockInvoices, type Invoice } from "../demo-erp/mockOrders";
+import type { WorkflowRunInputs } from "./workflowPlanner";
 
 export type PaymentPacketInvoice = {
   invoiceId: string;
@@ -35,9 +36,12 @@ export function parseVendorPaymentRequest(request: string): { status: "overdue";
   return { status: "overdue", minAmount: Number.isFinite(minAmount) ? minAmount : 5000 };
 }
 
-export function startVendorPaymentWorkflow(request: string): VendorAgentRun {
-  const { minAmount, status } = parseVendorPaymentRequest(request);
-  const invoices = searchInvoices(status, minAmount);
+export function startVendorPaymentWorkflow(request: string, inputs?: WorkflowRunInputs): VendorAgentRun {
+  const parsed = parseVendorPaymentRequest(request);
+  const status = inputs?.status ?? parsed.status;
+  const minAmount = inputs?.minAmount ?? parsed.minAmount;
+  const riskFilter = inputs?.riskFilter ?? "all";
+  const invoices = searchInvoices(status, minAmount, riskFilter);
   const details = invoices.map((invoice) => openInvoice(invoice.invoiceId));
   const invoiceIds = details.map((invoice) => invoice.invoiceId);
 
@@ -47,7 +51,7 @@ export function startVendorPaymentWorkflow(request: string): VendorAgentRun {
       {
         type: "tool_call",
         tool: "searchInvoices",
-        message: `Searching ${status} invoices above EUR ${minAmount.toLocaleString("en-US")}`,
+        message: `Searching ${status} invoices above EUR ${minAmount.toLocaleString("en-US")}${riskFilter === "low-risk-only" ? " with low-risk vendors only" : ""}`,
       },
       {
         type: "tool_result",
@@ -102,8 +106,13 @@ export function finishVendorPaymentWorkflow(invoiceIds: string[], includeBankDet
   };
 }
 
-function searchInvoices(status: "overdue", minAmount: number): Invoice[] {
-  return mockInvoices.filter((invoice) => invoice.status === status && invoice.amount >= minAmount);
+function searchInvoices(status: "overdue", minAmount: number, riskFilter: WorkflowRunInputs["riskFilter"]): Invoice[] {
+  return mockInvoices.filter(
+    (invoice) =>
+      invoice.status === status &&
+      invoice.amount >= minAmount &&
+      (riskFilter === "all" || invoice.riskFlag === "none"),
+  );
 }
 
 function openInvoice(invoiceId: string): Invoice {

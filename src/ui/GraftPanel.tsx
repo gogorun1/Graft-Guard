@@ -8,6 +8,7 @@ import type { AuditEvent } from "../graft/auditLog";
 import type { CompiledToolGroup } from "../graft/agentCompiler";
 import type { ReplayResult, ReplayTrace, ToolSchema } from "../graft/schemaTypes";
 import type { PaymentPacket, VendorAgentEvent } from "../graft/vendorPaymentAgent";
+import type { WorkflowRunInputs, WorkflowTaskPlan } from "../graft/workflowPlanner";
 import { AgentMessageStream } from "./AgentMessageStream";
 
 type PendingApproval = {
@@ -31,8 +32,10 @@ type Props = {
   replayTrace: ReplayTrace[];
   schemas: ToolSchema[];
   selectedSchema?: ToolSchema;
+  taskPlan: WorkflowTaskPlan;
   toolParams: Record<string, string>;
   vendorAgentEvents: VendorAgentEvent[];
+  workflowInputs: WorkflowRunInputs;
   onAllow: () => void;
   onCommandChange: (value: string) => void;
   onDeny: () => void;
@@ -42,6 +45,7 @@ type Props = {
   onSelectSchema: (schema: ToolSchema) => void;
   onToolParamChange: (name: string, value: string) => void;
   onUsePreset: () => void;
+  onWorkflowInputChange: (inputs: WorkflowRunInputs) => void;
 };
 
 export function GraftPanel({
@@ -60,8 +64,10 @@ export function GraftPanel({
   replayTrace,
   schemas,
   selectedSchema,
+  taskPlan,
   toolParams,
   vendorAgentEvents,
+  workflowInputs,
   onAllow,
   onCommandChange,
   onDeny,
@@ -71,6 +77,7 @@ export function GraftPanel({
   onSelectSchema,
   onToolParamChange,
   onUsePreset,
+  onWorkflowInputChange,
 }: Props) {
   const [compiledTab, setCompiledTab] = useState<"workflow" | "tools">("workflow");
   const [compileActivityOpen, setCompileActivityOpen] = useState(false);
@@ -268,6 +275,88 @@ export function GraftPanel({
             {schemas.length === 0 && (
               <div className="empty-state">
                 {isExtension ? "Compile this website to create a saved tool." : "Click compile to create tools."}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {isExtension && compiledToolGroup && (
+        <section className="panel-section">
+          <div className="section-heading">
+            <h3>Task plan</h3>
+            <span>{planStatusLabel(taskPlan)}</span>
+          </div>
+          <div className={`task-plan-card task-plan-${taskPlan.status}`}>
+            <div className="task-plan-summary">
+              <strong>{taskPlan.title}</strong>
+              <span>{taskPlan.summary}</span>
+            </div>
+            <div className="task-plan-metrics">
+              <span>
+                <strong>{taskPlan.reusedTools.length}</strong>
+                reused
+              </span>
+              <span>
+                <strong>{taskPlan.guardedTools.length}</strong>
+                guarded
+              </span>
+              <span>
+                <strong>{taskPlan.missingCapabilities.length}</strong>
+                missing
+              </span>
+            </div>
+            <div className="workflow-inputs">
+              <label>
+                Status
+                <select
+                  value={workflowInputs.status}
+                  onChange={(event) =>
+                    onWorkflowInputChange({ ...workflowInputs, status: event.target.value as WorkflowRunInputs["status"] })
+                  }
+                >
+                  <option value="overdue">Overdue</option>
+                </select>
+              </label>
+              <label>
+                Minimum amount
+                <input
+                  type="number"
+                  min="0"
+                  step="100"
+                  value={workflowInputs.minAmount}
+                  onChange={(event) =>
+                    onWorkflowInputChange({
+                      ...workflowInputs,
+                      minAmount: Math.max(0, Number(event.target.value) || 0),
+                    })
+                  }
+                />
+              </label>
+              <label>
+                Vendor risk
+                <select
+                  value={workflowInputs.riskFilter}
+                  onChange={(event) =>
+                    onWorkflowInputChange({
+                      ...workflowInputs,
+                      riskFilter: event.target.value as WorkflowRunInputs["riskFilter"],
+                    })
+                  }
+                >
+                  <option value="all">All vendors</option>
+                  <option value="low-risk-only">Low-risk only</option>
+                </select>
+              </label>
+            </div>
+            {taskPlan.missingCapabilities.length > 0 && (
+              <div className="missing-capabilities">
+                <strong>Missing capability</strong>
+                <div>
+                  {taskPlan.missingCapabilities.map((capability) => (
+                    <span key={capability}>{capability}</span>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -505,6 +594,18 @@ function runStatusLabel(
   }
 
   return `${eventCount} events`;
+}
+
+function planStatusLabel(plan: WorkflowTaskPlan): string {
+  if (plan.status === "ready") {
+    return "ready";
+  }
+
+  if (plan.status === "partial") {
+    return "partial reuse";
+  }
+
+  return "needs tools";
 }
 
 function packetStatusLabel(packet: PaymentPacket): string {

@@ -1001,6 +1001,119 @@ textarea {
   font-size: 12px;
 }
 
+.task-plan-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #d4e3e8;
+  border-radius: 8px;
+  background: #f7fafc;
+  padding: 12px;
+}
+
+.task-plan-ready {
+  border-color: #bad9c5;
+  background: #f4fbf7;
+}
+
+.task-plan-partial,
+.task-plan-needs_tools {
+  border-color: #dfc58c;
+  background: #fffaf0;
+}
+
+.task-plan-summary {
+  display: grid;
+  gap: 2px;
+}
+
+.task-plan-summary strong {
+  color: #142536;
+  font-size: 14px;
+}
+
+.task-plan-summary span {
+  color: #526273;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.task-plan-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.task-plan-metrics span {
+  display: grid;
+  gap: 2px;
+  border: 1px solid #d7dde3;
+  border-radius: 6px;
+  background: #fff;
+  color: #607080;
+  padding: 7px;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.task-plan-metrics strong {
+  color: #142536;
+  font-size: 14px;
+}
+
+.workflow-inputs {
+  display: grid;
+  gap: 8px;
+}
+
+.workflow-inputs label {
+  display: grid;
+  gap: 4px;
+  color: #344354;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.workflow-inputs input,
+.workflow-inputs select {
+  width: 100%;
+  border: 1px solid #c5ced6;
+  border-radius: 6px;
+  background: #fff;
+  color: #162331;
+  padding: 8px 10px;
+}
+
+.missing-capabilities {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid #eadbad;
+  padding-top: 9px;
+}
+
+.missing-capabilities strong {
+  color: #6d4a00;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.missing-capabilities div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.missing-capabilities span {
+  border: 1px solid #e4c674;
+  border-radius: 999px;
+  background: #fff;
+  color: #6d4a00;
+  padding: 3px 7px;
+  font-family: SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 800;
+}
+
 .payment-packet {
   display: grid;
   gap: 12px;

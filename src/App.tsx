@@ -36,6 +36,14 @@ import {
   type PaymentPacket,
   type VendorAgentEvent,
 } from "./graft/vendorPaymentAgent";
+import {
+  defaultWorkflowRunInputs,
+  formatVendorPaymentPrompt,
+  inferWorkflowRunInputs,
+  planWorkflowTask,
+  type WorkflowRunInputs,
+  type WorkflowTaskPlan,
+} from "./graft/workflowPlanner";
 import { GraftPanel } from "./ui/GraftPanel";
 import { ExtensionInspector } from "./ui/ExtensionInspector";
 
@@ -55,6 +63,9 @@ export default function App() {
   const [selectedToolName, setSelectedToolName] = useState(() => (isExtension ? "" : "queryOrders"));
   const [command, setCommand] = useState(presetCommand);
   const [websiteIntent, setWebsiteIntent] = useState(defaultWebsiteIntent);
+  const [workflowInputs, setWorkflowInputs] = useState<WorkflowRunInputs>(() =>
+    inferWorkflowRunInputs(presetCommand, defaultWorkflowRunInputs()),
+  );
   const [toolParams, setToolParams] = useState<Record<string, string>>({});
   const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([]);
   const [compileActivity, setCompileActivity] = useState<string[]>([]);
@@ -80,6 +91,11 @@ export default function App() {
   const selectedSchema = useMemo(
     () => schemas.find((schema) => schema.name === selectedToolName) ?? schemas[0],
     [schemas, selectedToolName],
+  );
+
+  const taskPlan = useMemo(
+    () => planWorkflowTask(command, schemas, workflowInputs),
+    [command, schemas, workflowInputs],
   );
 
   useEffect(() => {
@@ -254,6 +270,7 @@ export default function App() {
 
       const effectiveIntent = websiteIntent.trim() || defaultWebsiteIntent;
       setCommand(effectiveIntent);
+      setWorkflowInputs(inferWorkflowRunInputs(effectiveIntent, workflowInputs));
       const group = await compileToolGroupWithAgent({ prompt: effectiveIntent, pageSummary: summary });
       addCompileActivity(
         group.provider === "agent-api"
@@ -395,6 +412,11 @@ export default function App() {
   }
 
   async function handleRun() {
+    if (compiledToolGroup && taskPlan.missingCapabilities.length > 0) {
+      await handleLearnWebsite();
+      return;
+    }
+
     if (isVendorPaymentRequest(command) && (!isExtension || compiledToolGroup)) {
       await runVendorPaymentWorkflow();
       return;
@@ -575,7 +597,7 @@ export default function App() {
 
     try {
       await sleep(simulatedRunDelayMs);
-      const run = startVendorPaymentWorkflow(command);
+      const run = startVendorPaymentWorkflow(command, workflowInputs);
       setVendorAgentEvents(run.events);
 
       for (const event of run.events) {
@@ -722,6 +744,7 @@ export default function App() {
             setWebsiteIntent(value);
             if (compiledToolGroup) {
               setCommand(value);
+              setWorkflowInputs(inferWorkflowRunInputs(value, workflowInputs));
             }
           }}
           onInspect={handleInspectActivePage}
@@ -745,7 +768,9 @@ export default function App() {
           replayTrace={replayTrace}
           schemas={schemas}
           selectedSchema={selectedSchema}
+          taskPlan={taskPlan}
           toolParams={toolParams}
+          workflowInputs={workflowInputs}
           compiledToolGroup={compiledToolGroup}
           vendorAgentEvents={vendorAgentEvents}
           onAllow={handleAllow}
@@ -755,6 +780,12 @@ export default function App() {
           onRun={handleRun}
           onRunSelectedTool={handleRunSelectedTool}
           onSelectSchema={(schema) => setSelectedToolName(schema.name)}
+          onWorkflowInputChange={(nextInputs) => {
+            setWorkflowInputs(nextInputs);
+            const nextPrompt = formatVendorPaymentPrompt(nextInputs);
+            setCommand(nextPrompt);
+            setWebsiteIntent(nextPrompt);
+          }}
           onToolParamChange={(name, value) => setToolParams((current) => ({ ...current, [name]: value }))}
           onUsePreset={() => setCommand(presetCommand)}
         />
@@ -763,6 +794,7 @@ export default function App() {
           isCompiling={isLearningWebsite}
           isRunning={isRunning}
           pendingApproval={pendingApproval}
+          taskPlan={taskPlan}
           toolCount={schemas.length}
           onAllow={handleAllow}
           onCompile={handleLearnWebsite}
@@ -779,6 +811,7 @@ function WorkflowActionBar({
   isCompiling,
   isRunning,
   pendingApproval,
+  taskPlan,
   toolCount,
   onAllow,
   onCompile,
@@ -789,6 +822,7 @@ function WorkflowActionBar({
   isCompiling: boolean;
   isRunning: boolean;
   pendingApproval?: PendingApproval;
+  taskPlan: WorkflowTaskPlan;
   toolCount: number;
   onAllow: () => void;
   onCompile: () => void;
@@ -819,17 +853,19 @@ function WorkflowActionBar({
     : isRunning
       ? "Running..."
       : hasCompiledWorkflow
-        ? "Run workflow"
+        ? taskPlan.missingCapabilities.length > 0
+          ? "Compile missing tool"
+          : "Run workflow"
         : "Compile tools";
 
   return (
     <div className="workflow-action-bar" aria-label="Workflow actions">
       <div className="workflow-action-copy">
-        <strong>{hasCompiledWorkflow ? "Ready" : "Compile required"}</strong>
-        <span>{hasCompiledWorkflow ? `${toolCount} reusable tools saved` : "Create tools once, then reuse them for runs"}</span>
+        <strong>{actionBarTitle(hasCompiledWorkflow, taskPlan)}</strong>
+        <span>{actionBarSummary(hasCompiledWorkflow, toolCount, taskPlan)}</span>
       </div>
       <div className="workflow-action-buttons">
-        {hasCompiledWorkflow && !isCompiling && !isRunning && (
+        {hasCompiledWorkflow && taskPlan.missingCapabilities.length === 0 && !isCompiling && !isRunning && (
           <button type="button" className="workflow-action-link" onClick={onCompile}>
             Recompile
           </button>
@@ -837,7 +873,7 @@ function WorkflowActionBar({
         <button
           type="button"
           className="primary-button"
-          onClick={hasCompiledWorkflow ? onRun : onCompile}
+          onClick={hasCompiledWorkflow && taskPlan.missingCapabilities.length === 0 ? onRun : onCompile}
           disabled={isCompiling || isRunning}
         >
           {primaryLabel}
@@ -845,6 +881,34 @@ function WorkflowActionBar({
       </div>
     </div>
   );
+}
+
+function actionBarTitle(hasCompiledWorkflow: boolean, taskPlan: WorkflowTaskPlan): string {
+  if (!hasCompiledWorkflow) {
+    return "Compile required";
+  }
+
+  if (taskPlan.missingCapabilities.length > 0) {
+    return "Missing capability";
+  }
+
+  return "Ready";
+}
+
+function actionBarSummary(
+  hasCompiledWorkflow: boolean,
+  toolCount: number,
+  taskPlan: WorkflowTaskPlan,
+): string {
+  if (!hasCompiledWorkflow) {
+    return "Create tools once, then reuse them for runs";
+  }
+
+  if (taskPlan.missingCapabilities.length > 0) {
+    return `${taskPlan.reusedTools.length} reused · ${taskPlan.missingCapabilities.length} missing`;
+  }
+
+  return `${toolCount} reusable tools saved · ${taskPlan.guardedTools.length} guarded`;
 }
 
 function collectSchemaParams(schema: ToolSchema, values: Record<string, string>): Record<string, unknown> {

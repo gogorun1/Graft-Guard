@@ -59,9 +59,9 @@ export function ExtensionInspector({
       ? "Agent compiler is drafting reusable tools."
       : compiledToolGroup
         ? `${compiledToolGroup.tools.length} tools saved`
-      : compileStatus === "compiled"
-        ? "Recorded tool ready to save"
-        : "No tools saved yet";
+        : compileStatus === "compiled"
+          ? "Recorded tool ready to save"
+          : "No tools saved yet";
 
   return (
     <section className="extension-inspector" aria-label="Compile website">
@@ -70,7 +70,7 @@ export function ExtensionInspector({
           <p>Workflow compiler</p>
           <h2>Graft Guard</h2>
         </div>
-        <button type="button" className="api-plan-button">API plan</button>
+        <button type="button" className="api-plan-button">MiniMax Powered</button>
       </header>
 
       <div className={`compile-status compile-status-${compileStatus}`}>
@@ -81,11 +81,15 @@ export function ExtensionInspector({
 
       <div className="intent-panel">
         <label className="intent-field">
-          Describe what you want to automate
+          {compiledToolGroup ? "What do you want to do?" : "Describe what you want to automate"}
           <textarea
             value={intent}
             onChange={(event) => onIntentChange(event.target.value)}
-            placeholder="Leave blank to use the default compile goal."
+            placeholder={
+              compiledToolGroup
+                ? "Ask for a new run. Graft Guard will try saved tools first."
+                : "Leave blank to use the default compile goal."
+            }
           />
         </label>
       </div>
