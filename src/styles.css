@@ -476,6 +476,17 @@ button {
   -webkit-line-clamp: 2;
 }
 
+.agent-message small {
+  display: block;
+  overflow: hidden;
+  margin-top: 3px;
+  color: #6b7885;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .panel-section {
   padding: 16px 18px;
   border-bottom: 1px solid #e2e6ea;
@@ -1380,7 +1391,8 @@ textarea {
   margin-bottom: 0;
 }
 
-.candidate-schema code {
+.candidate-schema code,
+.suggested-signatures code {
   display: block;
   overflow-x: auto;
   border: 1px solid #d6e2e8;
@@ -1390,6 +1402,18 @@ textarea {
   padding: 8px;
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 12px;
+}
+
+.suggested-signatures {
+  display: grid;
+  gap: 6px;
+}
+
+.agent-reason {
+  margin: 0;
+  color: #31465a;
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .warning-list {

@@ -10,6 +10,7 @@ export function AgentMessage({ compact = false, message }: Props) {
     <article className={`agent-message agent-message-${message.phase} ${compact ? "agent-message-compact" : ""}`}>
       <div className="agent-message-body">
         <p>{message.text}</p>
+        {!compact && message.detail && <small>{message.detail}</small>}
       </div>
     </article>
   );

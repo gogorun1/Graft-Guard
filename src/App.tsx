@@ -40,8 +40,7 @@ import { GraftPanel } from "./ui/GraftPanel";
 import { ExtensionInspector } from "./ui/ExtensionInspector";
 
 const presetCommand = "Prepare a vendor payment packet for all overdue invoices above EUR 5,000, but do not export bank details without approval.";
-const defaultWebsiteIntent = presetCommand;
-const fakeCompileDelayMs = 2000;
+const defaultWebsiteIntent = "Create a tool to submit this form";
 const simulatedRunDelayMs = 1200;
 
 type PendingApproval = {
@@ -77,8 +76,12 @@ export default function App() {
   const isExtension = isExtensionRuntime();
 
   const selectedSchema = useMemo(
-    () => schemas.find((schema) => schema.name === selectedToolName) ?? schemas[0],
-    [schemas, selectedToolName],
+    () =>
+      schemas.find((schema) => schema.name === selectedToolName) ??
+      compiledToolGroup?.tools.find((schema) => schema.name === selectedToolName) ??
+      schemas[0] ??
+      compiledToolGroup?.tools[0],
+    [compiledToolGroup, schemas, selectedToolName],
   );
 
   useEffect(() => {
@@ -247,23 +250,19 @@ export default function App() {
       const summary = await collectActivePageSummary();
       setPageSummary(summary);
       addAgentMessage({ type: "compile_started", summary });
-      await sleep(fakeCompileDelayMs);
 
       const effectiveIntent = websiteIntent.trim() || defaultWebsiteIntent;
       setCommand(effectiveIntent);
       const group = await compileToolGroupWithAgent({ prompt: effectiveIntent, pageSummary: summary });
-      let savedTools = group.tools;
-      for (const tool of group.tools) {
-        savedTools = savePageSchema(summary, tool);
-      }
       setCompiledToolGroup(group);
-      setSchemas(savedTools);
+      setSchemas([]);
       setSelectedToolName(group.tools[0]?.name ?? "generatedTool");
+      addAgentMessage({ type: "compile_group_succeeded", group, summary });
       addAudit({
         type: "learned_tool",
         toolName: group.name,
         risk: "read",
-        message: `Compiled ${group.name} by ${group.provider === "agent-api" ? "Agent API" : "local fallback"}`,
+        message: `Suggested ${group.name} by ${group.provider === "agent-api" ? "MiniMax" : "local fallback"}`,
         llmCalls: group.provider === "agent-api" ? 1 : 0,
       });
     } catch (error) {
@@ -369,7 +368,28 @@ export default function App() {
   }
 
   function handleSaveGeneratedSchema() {
-    if (!candidateTool || !pageSummary) {
+    if (!pageSummary) {
+      return;
+    }
+
+    if (compiledToolGroup) {
+      let saved = loadPageSchemas(pageSummary);
+      for (const tool of compiledToolGroup.tools) {
+        saved = savePageSchema(pageSummary, tool);
+      }
+      setSchemas(saved);
+      setSelectedToolName(compiledToolGroup.tools[0]?.name ?? "generatedTool");
+      addAudit({
+        type: "learned_tool",
+        toolName: compiledToolGroup.name,
+        risk: "read",
+        message: `Saved ${compiledToolGroup.tools.length} compiled tools for ${pageSummary.origin}`,
+        llmCalls: 0,
+      });
+      return;
+    }
+
+    if (!candidateTool) {
       return;
     }
 
@@ -714,6 +734,7 @@ export default function App() {
           onInspect={handleInspectActivePage}
           onLearnWebsite={handleLearnWebsite}
           onSaveSchema={handleSaveGeneratedSchema}
+          isSuggestedToolSaved={Boolean(compiledToolGroup && schemas.length > 0)}
           onStartCapture={handleStartCapture}
           onStopCapture={handleStopCapture}
           onToggleAdvanced={() => setAdvancedOpen((current) => !current)}

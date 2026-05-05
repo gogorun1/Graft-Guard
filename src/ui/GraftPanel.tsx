@@ -115,7 +115,7 @@ export function GraftPanel({
                 Generated tools
               </button>
             </div>
-            <span>{compiledToolGroup.provider === "agent-api" ? "Agent API" : "local fallback"}</span>
+            <span>{compiledToolGroup.provider === "agent-api" ? "MiniMax" : "local fallback"}</span>
           </div>
 
           {compiledTab === "workflow" ? (

@@ -4,6 +4,7 @@ import type { AgentMessage as AgentMessageModel } from "../graft/agentNarrator";
 import type { CompiledToolGroup } from "../graft/agentCompiler";
 import { schemaSignature } from "../graft/schemaCompiler";
 import type { ToolSchema } from "../graft/schemaTypes";
+import { AgentMessageStream } from "./AgentMessageStream";
 
 type Props = {
   advancedOpen: boolean;
@@ -18,6 +19,7 @@ type Props = {
   isExtension: boolean;
   isInspecting: boolean;
   isLearningWebsite: boolean;
+  isSuggestedToolSaved: boolean;
   summary?: PageDomSummary;
   onIntentChange: (value: string) => void;
   onInspect: () => void;
@@ -41,6 +43,7 @@ export function ExtensionInspector({
   isExtension,
   isInspecting,
   isLearningWebsite,
+  isSuggestedToolSaved,
   summary,
   onIntentChange,
   onInspect,
@@ -52,16 +55,18 @@ export function ExtensionInspector({
 }: Props) {
   const hasWarnings = candidateWarnings.length > 0;
   const showCustomTool = isCapturing || hasWarnings || Boolean(error);
-  const compileStatus = isLearningWebsite ? "compiling" : candidateSchema || compiledToolGroup ? "compiled" : "idle";
-  const latestMessage = agentMessages[0]?.text;
+  const suggestedSchema = candidateSchema ?? compiledToolGroup?.tools[0];
+  const suggestedTools = compiledToolGroup?.tools ?? (suggestedSchema ? [suggestedSchema] : []);
+  const suggestedWarnings = candidateSchema ? candidateWarnings : compiledToolGroup?.riskNotes ?? [];
+  const compileStatus = isLearningWebsite ? "compiling" : suggestedSchema || compiledToolGroup ? "compiled" : "idle";
   const compileStatusText =
     compileStatus === "compiling"
-      ? latestMessage ?? "Reading the page and drafting a tool schema."
+      ? "Sending the page summary and intent to the compiler."
       : compiledToolGroup
-        ? `Compiled ${compiledToolGroup.tools.length} tools via ${compiledToolGroup.provider === "agent-api" ? "Agent API" : "local fallback"}.`
+        ? `Compiled ${compiledToolGroup.tools.length} tools via ${providerLabel(compiledToolGroup)}.`
       : compileStatus === "compiled"
-        ? latestMessage ?? "Tool schema is ready to save."
-        : "Describe the workflow, or leave it blank to use the default compile goal.";
+        ? "Tool schema is ready to save."
+      : "Describe the workflow, or leave it blank to use the default compile goal.";
 
   return (
     <section className="extension-inspector" aria-label="Compile website">
@@ -78,6 +83,8 @@ export function ExtensionInspector({
         <strong>{compileStatus === "compiling" ? "Compiling" : compileStatus === "compiled" ? "Compiled" : "Ready to compile"}</strong>
         <span>{compileStatusText}</span>
       </div>
+
+      <AgentMessageStream messages={agentMessages.filter((message) => message.phase === "compile" || message.phase === "idle")} />
 
       <div className="intent-panel">
         <label className="intent-field">
@@ -98,26 +105,42 @@ export function ExtensionInspector({
         </button>
       </div>
 
-      {candidateSchema && (
+      {suggestedSchema && (
         <div className="candidate-schema">
           <div className="section-heading">
-            <h3>Suggested tool</h3>
-            <span>{candidateSchema.risk}</span>
+            <h3>{compiledToolGroup && compiledToolGroup.tools.length > 1 ? "Suggested workflow" : "Suggested tool"}</h3>
+            <span>{highestRiskLabel(suggestedTools)}</span>
           </div>
-          <code>{schemaSignature(candidateSchema)}</code>
-          {candidateWarnings.length > 0 && (
+          <div className="suggested-signatures">
+            {suggestedTools.map((tool) => (
+              <code key={tool.name}>{schemaSignature(tool)}</code>
+            ))}
+          </div>
+          {compiledToolGroup && (
+            <p className="agent-reason">
+              {providerLabel(compiledToolGroup)} reason: {suggestedWarnings[0] ?? "Compiler normalized the page intent into a typed tool."}
+            </p>
+          )}
+          {suggestedWarnings.length > 0 && (
             <ul className="warning-list">
-              {candidateWarnings.map((warning) => (
+              {suggestedWarnings.slice(compiledToolGroup ? 1 : 0, compiledToolGroup ? 4 : undefined).map((warning) => (
                 <li key={warning}>{warning}</li>
               ))}
             </ul>
           )}
-          {hasWarnings && (
+          {hasWarnings && !compiledToolGroup && (
             <p className="fallback-hint">This suggestion may need a recorded action path.</p>
           )}
-          <button type="button" className="primary-button full-width" onClick={onSaveSchema}>
-            Save tool
-          </button>
+          {(candidateSchema || compiledToolGroup) && (
+            <button
+              type="button"
+              className="primary-button full-width"
+              onClick={onSaveSchema}
+              disabled={Boolean(compiledToolGroup) && isSuggestedToolSaved}
+            >
+              {compiledToolGroup && isSuggestedToolSaved ? "Saved tool" : "Save tool"}
+            </button>
+          )}
         </div>
       )}
 
@@ -233,6 +256,25 @@ export function ExtensionInspector({
       )}
     </section>
   );
+}
+
+function providerLabel(group: CompiledToolGroup): string {
+  return group.provider === "agent-api" ? "MiniMax" : "local fallback";
+}
+
+function highestRiskLabel(tools: ToolSchema[]): string {
+  const order: Record<ToolSchema["risk"], number> = {
+    read: 0,
+    write: 1,
+    export: 2,
+    destructive: 3,
+  };
+  const highest = tools.reduce<ToolSchema["risk"]>(
+    (current, tool) => (order[tool.risk] > order[current] ? tool.risk : current),
+    "read",
+  );
+
+  return highest === "read" ? "read" : `${highest} guarded`;
 }
 
 function SummaryList({ title, items }: { title: string; items: string[] }) {

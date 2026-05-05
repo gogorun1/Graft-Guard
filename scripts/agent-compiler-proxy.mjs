@@ -44,7 +44,6 @@ server.listen(port, "127.0.0.1", () => {
 
 async function callCompiler(body) {
   const prompt = [
-    "You are the Graft Guard Agent Compiler.",
     "Read the user's goal and the page summary, then produce an AgentDraft JSON object.",
     "You are not responsible for browser replay selectors. Graft Guard will compile your semantic draft into executable tools.",
     "AgentDraft shape:",
@@ -74,8 +73,12 @@ async function callCompiler(body) {
     },
     body: JSON.stringify({
       model: body.model ?? model,
-      messages: [{ role: "user", content: prompt }],
+      messages: [
+        { role: "system", name: "Graft Guard", content: "You are the Graft Guard Agent Compiler. Return compact JSON for workflow compilation." },
+        { role: "user", name: "User", content: prompt },
+      ],
       temperature: 0.1,
+      max_completion_tokens: 2048,
     }),
   });
 
