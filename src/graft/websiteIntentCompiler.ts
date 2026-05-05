@@ -21,20 +21,20 @@ export function compileWebsiteIntent(intent: string, page: PageDomSummary): Cand
       warnings.push(`Selector may be dynamic: ${input.selector}`);
     }
 
-    return { type: "setValue", selector: input.selector, valueFrom: name };
+    return { type: "setValue", selector: input.selector, locator: input.locator, valueFrom: name };
   });
 
   if (submitButton) {
     if (looksDynamicSelector(submitButton.selector)) {
       warnings.push(`Selector may be dynamic: ${submitButton.selector}`);
     }
-    replayPlan.push({ type: "click", selector: submitButton.selector });
+    replayPlan.push({ type: "click", selector: submitButton.selector, locator: submitButton.locator });
   } else {
     warnings.push("No clear submit/action button was detected. Use Record actions for this page.");
   }
 
   if (risk === "read" && page.tables[0]) {
-    replayPlan.push({ type: "extractTable", selector: page.tables[0].selector });
+    replayPlan.push({ type: "extractTable", selector: page.tables[0].selector, locator: page.tables[0].locator });
   }
 
   if (usableInputs.length === 0) {

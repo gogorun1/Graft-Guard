@@ -1,7 +1,8 @@
-import type { ToolSchema } from "../graft/schemaTypes";
+import type { LocatorSpec, ToolSchema } from "../graft/schemaTypes";
 
 export type PageInputSummary = {
   selector: string;
+  locator?: LocatorSpec;
   label?: string;
   type: string;
   role?: string;
@@ -13,6 +14,7 @@ export type PageInputSummary = {
 
 export type PageButtonSummary = {
   selector: string;
+  locator?: LocatorSpec;
   text: string;
   type?: string;
   role?: string;
@@ -20,18 +22,21 @@ export type PageButtonSummary = {
 
 export type PageTableSummary = {
   selector: string;
+  locator?: LocatorSpec;
   headers: string[];
   rowCount: number;
 };
 
 export type PageFormSummary = {
   selector: string;
+  locator?: LocatorSpec;
   inputCount: number;
   buttonCount: number;
 };
 
 export type PageRegionSummary = {
   selector: string;
+  locator?: LocatorSpec;
   role?: string;
   label?: string;
   textPreview: string;
@@ -53,6 +58,7 @@ export type CapturedStep =
   | {
       type: "setValue";
       selector: string;
+      locator?: LocatorSpec;
       label?: string;
       inputType: string;
       valuePreview: string;
@@ -60,6 +66,7 @@ export type CapturedStep =
   | {
       type: "click";
       selector: string;
+      locator?: LocatorSpec;
       label?: string;
       tagName: string;
     };

@@ -9,7 +9,7 @@ import type {
   PageRegionSummary,
   PageTableSummary,
 } from "./pageSummary";
-import type { ReplayResult, ReplayStep, ReplayTrace } from "../graft/schemaTypes";
+import type { LocatorSpec, ReplayResult, ReplayStep, ReplayTrace } from "../graft/schemaTypes";
 
 let isCapturing = false;
 let capturedSteps: CapturedStep[] = [];
@@ -82,6 +82,7 @@ function handleCapturedInput(event: Event) {
   const step: CapturedStep = {
     type: "setValue",
     selector,
+    locator: locatorForElement(target),
     label: findLabel(target),
     inputType: inputType(target),
     valuePreview: previewInputValue(target),
@@ -116,6 +117,7 @@ function handleCapturedClick(event: MouseEvent) {
   const step: CapturedStep = {
     type: "click",
     selector: bestSelector(target),
+    locator: locatorForElement(target),
     label: visibleText(target),
     tagName: target.tagName.toLowerCase(),
   };
@@ -181,21 +183,21 @@ async function replayToolOnPage(
 
   for (const step of replayPlan) {
     if (step.type === "setValue") {
-      const element = queryReplayElement(step.selector);
+      const element = resolveReplayElement(step);
       setElementValue(element, params[step.valueFrom]);
-      trace.push({ step, message: `Set ${step.selector} from ${step.valueFrom}` });
+      trace.push({ step, message: `Set ${replayTargetLabel(step)} from ${step.valueFrom}` });
       await sleep(75);
     }
 
     if (step.type === "click") {
-      queryReplayElement<HTMLElement>(step.selector).click();
-      trace.push({ step, message: `Clicked ${step.selector}` });
+      resolveReplayElement<HTMLElement>(step).click();
+      trace.push({ step, message: `Clicked ${replayTargetLabel(step)}` });
       await sleep(100);
     }
 
     if (step.type === "extractTable") {
-      rows = extractTable(step.selector);
-      trace.push({ step, message: `Extracted ${rows.length} rows from ${step.selector}` });
+      rows = extractTable(step);
+      trace.push({ step, message: `Extracted ${rows.length} rows from ${replayTargetLabel(step)}` });
       await sleep(50);
     }
   }
@@ -263,29 +265,46 @@ function normalizeDateValue(value: unknown): string {
   return date.toISOString().slice(0, 10);
 }
 
-function queryReplayElement<T extends Element = Element>(selector: string): T {
-  const element = document.querySelector(selector);
+function resolveReplayElement<T extends Element = Element>(step: ReplayStep): T {
+  const element = queryReplayElement<T>(step.selector) ?? findElementByLocator<T>(step.locator);
   if (!element) {
-    throw new Error(`Replay selector not found: ${selector}`);
+    throw new Error(`Replay target not found: ${replayTargetLabel(step)}`);
   }
 
-  return element as T;
+  return element;
 }
 
-function extractTable(selector: string): Record<string, string | number>[] {
-  const table = queryReplayElement<HTMLTableElement>(selector);
-  const headers = Array.from(table.querySelectorAll("thead th, tr:first-child th, tr:first-child td")).map((cell) =>
+function queryReplayElement<T extends Element = Element>(selector: string): T | undefined {
+  if (!selector) {
+    return undefined;
+  }
+
+  try {
+    return querySelectorDeep<T>(selector);
+  } catch {
+    return undefined;
+  }
+}
+
+function extractTable(step: Extract<ReplayStep, { type: "extractTable" }>): Record<string, string | number>[] {
+  const table = resolveReplayElement<TableLikeElement>(step);
+  const headers = Array.from(table.querySelectorAll("thead th, [role='columnheader'], tr:first-child th, tr:first-child td, [role='row']:first-child [role='cell']")).map((cell) =>
     normalizeKey(cell.textContent ?? ""),
   );
 
-  return Array.from(table.querySelectorAll("tbody tr")).map((row) => {
-    const values = Array.from(row.querySelectorAll("td"));
+  const rows = Array.from(table.querySelectorAll("tbody tr, [role='row']")).slice(headers.length > 0 ? 1 : 0);
+  return rows.map((row) => {
+    const values = Array.from(row.querySelectorAll("td, [role='cell'], [role='gridcell']"));
     return headers.reduce<Record<string, string | number>>((record, key, index) => {
       const value = values[index]?.textContent?.trim() ?? "";
       record[key] = key === "amount" ? Number(value.replace(/[^\d.]/g, "")) : value;
       return record;
     }, {});
   });
+}
+
+function replayTargetLabel(step: ReplayStep): string {
+  return step.locator?.name || step.locator?.label || step.locator?.text || step.selector;
 }
 
 function sleep(ms: number) {
@@ -377,6 +396,7 @@ function collectPageSummary(): PageDomSummary {
 function summarizeInput(element: InputLikeElement): PageInputSummary {
   return {
     selector: bestSelector(element),
+    locator: locatorForElement(element),
     label: findLabel(element),
     type: inputType(element),
     role: element.getAttribute("role") ?? undefined,
@@ -390,6 +410,7 @@ function summarizeInput(element: InputLikeElement): PageInputSummary {
 function summarizeButton(element: HTMLElement): PageButtonSummary {
   return {
     selector: bestSelector(element),
+    locator: locatorForElement(element),
     text: visibleText(element),
     type: element.getAttribute("type") ?? undefined,
     role: element.getAttribute("role") ?? undefined,
@@ -405,6 +426,7 @@ function summarizeTable(table: TableLikeElement): PageTableSummary {
   const semanticRows = table.querySelectorAll("[role='row']").length;
   return {
     selector: bestSelector(table),
+    locator: locatorForElement(table),
     headers,
     rowCount: table.querySelectorAll("tbody tr").length || Math.max(0, table.querySelectorAll("tr").length - 1) || Math.max(0, semanticRows - 1),
   };
@@ -413,6 +435,7 @@ function summarizeTable(table: TableLikeElement): PageTableSummary {
 function summarizeForm(form: HTMLFormElement): PageFormSummary {
   return {
     selector: bestSelector(form),
+    locator: locatorForElement(form),
     inputCount: form.querySelectorAll("input, select, textarea").length,
     buttonCount: form.querySelectorAll("button, input[type='button'], input[type='submit']").length,
   };
@@ -421,6 +444,7 @@ function summarizeForm(form: HTMLFormElement): PageFormSummary {
 function summarizeRegion(element: HTMLElement): PageRegionSummary {
   return {
     selector: bestSelector(element),
+    locator: locatorForElement(element),
     role: element.getAttribute("role") ?? element.tagName.toLowerCase(),
     label: findLabel(element),
     textPreview: previewText(element),
@@ -442,6 +466,99 @@ function querySelectorAllDeep<T extends HTMLElement>(selector: string, root: Doc
   }
 
   return matches;
+}
+
+function querySelectorDeep<T extends Element>(selector: string, root: Document | ShadowRoot = document): T | undefined {
+  const match = root.querySelector<T>(selector);
+  if (match) {
+    return match;
+  }
+
+  const shadowHosts = Array.from(root.querySelectorAll<HTMLElement>("*")).filter((element) => element.shadowRoot);
+  for (const host of shadowHosts) {
+    if (!host.shadowRoot) {
+      continue;
+    }
+
+    const shadowMatch = querySelectorDeep<T>(selector, host.shadowRoot);
+    if (shadowMatch) {
+      return shadowMatch;
+    }
+  }
+
+  return undefined;
+}
+
+function findElementByLocator<T extends Element>(locator?: LocatorSpec): T | undefined {
+  if (!locator) {
+    return undefined;
+  }
+
+  const scope = locator.within ? findElementByLocator<HTMLElement>(locator.within) : undefined;
+  const root = scope ?? document;
+  const candidates = locatorCandidates(root, locator);
+  const ranked = candidates
+    .map((element) => ({ element, score: locatorScore(element, locator) }))
+    .filter((match) => match.score > 0)
+    .sort((left, right) => right.score - left.score);
+
+  if (ranked[0]) {
+    return ranked[0].element as unknown as T;
+  }
+
+  for (const alternative of locator.alternatives ?? []) {
+    const match = findElementByLocator<T>(alternative);
+    if (match) {
+      return match;
+    }
+  }
+
+  return undefined;
+}
+
+function locatorCandidates(root: Document | ShadowRoot | HTMLElement, locator: LocatorSpec): HTMLElement[] {
+  const selectorParts = [
+    locator.testId ? `[data-testid="${cssEscape(locator.testId)}"], [data-test="${cssEscape(locator.testId)}"], [data-test-id="${cssEscape(locator.testId)}"], [data-cy="${cssEscape(locator.testId)}"], [data-qa="${cssEscape(locator.testId)}"]` : "",
+    locator.role ? `[role="${cssEscape(locator.role)}"]` : "",
+    locator.placeholder ? `[placeholder="${cssEscape(locator.placeholder)}"]` : "",
+    locator.name ? `[aria-label="${cssEscape(locator.name)}"]` : "",
+    locator.label ? `[aria-label="${cssEscape(locator.label)}"]` : "",
+    locator.tagName ?? "",
+  ].filter(Boolean);
+
+  const selector = selectorParts.length > 0 ? selectorParts.join(", ") : "*";
+  const elementRoot = root instanceof HTMLElement ? root : undefined;
+  const raw = elementRoot
+    ? Array.from(elementRoot.querySelectorAll<HTMLElement>(selector))
+    : querySelectorAllDeep<HTMLElement>(selector, root as Document | ShadowRoot);
+
+  if (elementRoot && elementRoot.matches(selector)) {
+    raw.unshift(elementRoot);
+  }
+
+  return Array.from(new Set(raw)).filter(isVisible);
+}
+
+function locatorScore(element: HTMLElement, locator: LocatorSpec): number {
+  let score = 0;
+  const accessibleName = accessibleNameFor(element).toLowerCase();
+  const text = cleanText(element.textContent ?? "").toLowerCase();
+  const placeholder = element.getAttribute("placeholder")?.toLowerCase();
+  const role = element.getAttribute("role") ?? implicitRole(element);
+  const testId = testIdFor(element);
+
+  if (locator.testId && testId === locator.testId) score += 80;
+  if (locator.css && queryReplayElement(locator.css) === element) score += 70;
+  if (locator.role && role === locator.role) score += 30;
+  if (locator.tagName && element.tagName.toLowerCase() === locator.tagName) score += 15;
+  if (locator.type && inputType(element) === locator.type) score += 15;
+  if (locator.placeholder && placeholder === locator.placeholder.toLowerCase()) score += 35;
+  if (locator.name && accessibleName === locator.name.toLowerCase()) score += 50;
+  if (locator.label && accessibleName === locator.label.toLowerCase()) score += 50;
+  if (locator.text && text === locator.text.toLowerCase()) score += 35;
+  if (locator.text && text.includes(locator.text.toLowerCase())) score += 15;
+
+  return score;
 }
 
 function isVisible(element: HTMLElement): boolean {
@@ -623,8 +740,72 @@ function bestSelector(element: HTMLElement): string {
   return cssPath(element);
 }
 
+function locatorForElement(element: HTMLElement): LocatorSpec {
+  const selector = bestSelector(element);
+  const name = accessibleNameFor(element);
+  const testId = testIdFor(element);
+  const role = element.getAttribute("role") ?? implicitRole(element);
+  const text = visibleText(element);
+  const locator: LocatorSpec = {
+    css: selector,
+    role,
+    name: name || undefined,
+    label: findLabel(element),
+    placeholder: element.getAttribute("placeholder") ?? undefined,
+    text: text || undefined,
+    testId,
+    tagName: element.tagName.toLowerCase(),
+    type: inputType(element),
+    confidence: selector.includes(":nth-of-type") ? 0.55 : 0.82,
+  };
+
+  const alternatives: Array<LocatorSpec | undefined> = [
+    testId ? { testId, tagName: locator.tagName, confidence: 0.9 } : undefined,
+    role && name ? { role, name, confidence: 0.85 } : undefined,
+    locator.label ? { label: locator.label, tagName: locator.tagName, confidence: 0.78 } : undefined,
+    locator.placeholder ? { placeholder: locator.placeholder, tagName: locator.tagName, confidence: 0.72 } : undefined,
+    text ? { role, text, tagName: locator.tagName, confidence: 0.65 } : undefined,
+  ];
+  locator.alternatives = alternatives.filter((candidate): candidate is LocatorSpec => Boolean(candidate));
+
+  return locator;
+}
+
 function testAttributeName(element: HTMLElement): string {
   return ["data-testid", "data-test", "data-test-id", "data-cy", "data-qa"].find((name) => element.hasAttribute(name)) ?? "data-testid";
+}
+
+function testIdFor(element: HTMLElement): string | undefined {
+  const attributeName = testAttributeName(element);
+  return element.getAttribute(attributeName) ?? undefined;
+}
+
+function accessibleNameFor(element: HTMLElement): string {
+  return cleanText(findLabel(element) || element.getAttribute("aria-label") || element.getAttribute("title") || "");
+}
+
+function implicitRole(element: HTMLElement): string | undefined {
+  const tag = element.tagName.toLowerCase();
+  if (tag === "button" || (element instanceof HTMLInputElement && ["button", "submit", "reset"].includes(element.type))) {
+    return "button";
+  }
+
+  if (element instanceof HTMLInputElement) {
+    if (element.type === "checkbox") return "checkbox";
+    if (element.type === "radio") return "radio";
+    if (element.type === "search") return "searchbox";
+    return "textbox";
+  }
+
+  if (element instanceof HTMLTextAreaElement) return "textbox";
+  if (element instanceof HTMLSelectElement) return "combobox";
+  if (tag === "a" && element.hasAttribute("href")) return "link";
+  if (tag === "table") return "table";
+  if (tag === "nav") return "navigation";
+  if (tag === "main") return "main";
+  if (tag === "form") return "form";
+
+  return undefined;
 }
 
 function cssPath(element: HTMLElement): string {

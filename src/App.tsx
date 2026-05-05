@@ -41,6 +41,7 @@ import {
   formatVendorPaymentPrompt,
   inferWorkflowRunInputs,
   planWorkflowTask,
+  planWorkflowTaskWithAgent,
   type WorkflowRunInputs,
   type WorkflowTaskPlan,
 } from "./graft/workflowPlanner";
@@ -77,6 +78,7 @@ export default function App() {
   const [vendorAgentEvents, setVendorAgentEvents] = useState<VendorAgentEvent[]>([]);
   const [pendingBankInvoiceIds, setPendingBankInvoiceIds] = useState<string[]>();
   const [compiledToolGroup, setCompiledToolGroup] = useState<CompiledToolGroup>();
+  const [agentTaskPlan, setAgentTaskPlan] = useState<WorkflowTaskPlan>();
   const [isLearning, setIsLearning] = useState(false);
   const [isLearningWebsite, setIsLearningWebsite] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -93,10 +95,38 @@ export default function App() {
     [schemas, selectedToolName],
   );
 
-  const taskPlan = useMemo(
+  const localTaskPlan = useMemo(
     () => planWorkflowTask(command, schemas, workflowInputs),
     [command, schemas, workflowInputs],
   );
+  const taskPlan = agentTaskPlan ?? localTaskPlan;
+
+  useEffect(() => {
+    setAgentTaskPlan(undefined);
+    if (!isExtension || schemas.length === 0 || isLearningWebsite) {
+      return;
+    }
+
+    let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      void planWorkflowTaskWithAgent({
+        prompt: command,
+        tools: schemas,
+        inputs: workflowInputs,
+        pageSummary,
+        workflowPlan: compiledToolGroup?.workflowPlan,
+      }).then((plan) => {
+        if (!cancelled) {
+          setAgentTaskPlan(plan);
+        }
+      });
+    }, 800);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [command, compiledToolGroup?.workflowPlan, isExtension, isLearningWebsite, pageSummary, schemas, workflowInputs]);
 
   useEffect(() => {
     if (!selectedSchema) {

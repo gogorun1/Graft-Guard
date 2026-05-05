@@ -18,7 +18,7 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
-  if (request.method !== "POST" || request.url !== "/compile-tool-group") {
+  if (request.method !== "POST" || !["/compile-tool-group", "/plan-workflow"].includes(request.url ?? "")) {
     sendJson(response, 404, { error: "Not found" });
     return;
   }
@@ -32,8 +32,12 @@ const server = http.createServer(async (request, response) => {
 
   try {
     const body = await readJson(request);
-    const compilerResponse = await callCompiler(body);
-    sendJson(response, 200, compilerResponse);
+    if (request.url === "/plan-workflow") {
+      sendJson(response, 200, await callTaskPlanner(body));
+      return;
+    }
+
+    sendJson(response, 200, await callCompiler(body));
   } catch (error) {
     sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) });
   }
@@ -78,6 +82,58 @@ async function callCompiler(body) {
     JSON.stringify(body.missingCapabilities ?? [], null, 2),
   ].join("\n");
 
+  const text = await callMiniMaxText(prompt, body.model);
+  return normalizeCompilerResponse(parseJsonResponse(text), body);
+}
+
+async function callTaskPlanner(body) {
+  const prompt = [
+    "You are the Graft Guard Task Planner.",
+    "Plan the user's workflow against the saved reusable tools.",
+    "Return a WorkflowTaskPlan JSON object only.",
+    "Shape:",
+    "{",
+    '  "prompt": string,',
+    '  "title": string,',
+    '  "summary": string,',
+    '  "status": "needs_tools" | "ready" | "partial",',
+    '  "reusedTools": string[],',
+    '  "guardedTools": string[],',
+    '  "missingCapabilities": string[],',
+    '  "inputs": object',
+    "}",
+    "Rules:",
+    "- reusedTools must be names from Existing saved tools only.",
+    "- missingCapabilities should be short camelCase capability names that do not exist yet.",
+    "- guardedTools should include existing export/destructive tools and any tool requiring approval.",
+    "- Prefer reusing equivalent tools instead of inventing duplicates.",
+    "- If the task can run with saved tools, status is ready.",
+    "- If some tools can be reused but missing capabilities remain, status is partial.",
+    "- If no saved tools match, status is needs_tools.",
+    "",
+    "User prompt:",
+    body.prompt,
+    "",
+    "Current run inputs:",
+    JSON.stringify(body.inputs ?? {}, null, 2),
+    "",
+    "Existing saved tools:",
+    JSON.stringify(body.tools ?? [], null, 2),
+    "",
+    "Compiled workflow plan:",
+    JSON.stringify(body.workflowPlan ?? [], null, 2),
+    "",
+    "Page summary:",
+    JSON.stringify(body.pageSummary ?? {}, null, 2),
+    "",
+    "Local fallback plan:",
+    JSON.stringify(body.fallback ?? {}, null, 2),
+  ].join("\n");
+
+  return normalizeWorkflowTaskPlan(parseJsonResponse(await callMiniMaxText(prompt, body.model)), body);
+}
+
+async function callMiniMaxText(prompt, modelOverride) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), upstreamTimeoutMs);
   let upstream;
@@ -89,7 +145,7 @@ async function callCompiler(body) {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: body.model ?? model,
+        model: modelOverride ?? model,
         messages: [{ role: "user", content: prompt }],
         temperature: 0.1,
       }),
@@ -109,9 +165,7 @@ async function callCompiler(body) {
     throw new Error(`MiniMax API failed: ${upstream.status}`);
   }
 
-  const payload = await upstream.json();
-  const text = extractText(payload);
-  return normalizeCompilerResponse(parseJsonResponse(text), body);
+  return extractText(await upstream.json());
 }
 
 function normalizeCompilerResponse(parsed, body) {
@@ -138,6 +192,40 @@ function normalizeCompilerResponse(parsed, body) {
   }
 
   return buildGenericToolGroup(parsed, body);
+}
+
+function normalizeWorkflowTaskPlan(parsed, body) {
+  const fallback = body?.fallback ?? {};
+  const tools = Array.isArray(body?.tools) ? body.tools : [];
+  const toolNames = new Set(tools.map((tool) => tool?.name).filter(Boolean));
+  const reusedTools = asArray(parsed?.reusedTools)
+    .filter((tool) => typeof tool === "string" && toolNames.has(tool));
+  const guardedTools = asArray(parsed?.guardedTools)
+    .filter((tool) => typeof tool === "string" && toolNames.has(tool));
+  const inferredGuarded = tools
+    .filter((tool) => reusedTools.includes(tool.name) && ["export", "destructive"].includes(tool.risk))
+    .map((tool) => tool.name);
+  const missingCapabilities = asArray(parsed?.missingCapabilities)
+    .filter((capability) => typeof capability === "string" && capability.trim().length > 0)
+    .map(toCamelCase);
+  const status = ["needs_tools", "ready", "partial"].includes(parsed?.status)
+    ? parsed.status
+    : missingCapabilities.length > 0
+      ? reusedTools.length > 0
+        ? "partial"
+        : "needs_tools"
+      : "ready";
+
+  return {
+    prompt: String(body?.prompt ?? fallback.prompt ?? ""),
+    title: nonEmptyString(parsed?.title) ?? nonEmptyString(fallback.title) ?? "Workflow plan",
+    summary: nonEmptyString(parsed?.summary) ?? nonEmptyString(fallback.summary) ?? "Agent planned this workflow from saved tools.",
+    status,
+    reusedTools: reusedTools.length > 0 ? reusedTools : asArray(fallback.reusedTools).filter((tool) => typeof tool === "string"),
+    guardedTools: Array.from(new Set([...guardedTools, ...inferredGuarded])),
+    missingCapabilities,
+    inputs: body?.inputs ?? fallback.inputs ?? {},
+  };
 }
 
 function buildMissingCapabilityToolGroup(agentDraft, body, missingCapabilities) {
@@ -172,7 +260,7 @@ function buildMissingCapabilityTool(capability, summary) {
       properties: risk === "read" ? {} : { targetId: { type: "string", title: "Target ID" } },
       required: risk === "read" ? [] : ["targetId"],
     },
-    replayPlan: risk === "read" && table ? [{ type: "extractTable", selector: table }] : [],
+    replayPlan: risk === "read" && table ? [{ type: "extractTable", selector: table, locator: summary?.tables?.[0]?.locator }] : [],
   };
 }
 
@@ -333,16 +421,16 @@ function buildGenericTool(agentDraft, summary, prompt, button) {
     const name = uniqueName(inferInputName(input), usedNames);
     properties[name] = inferInputSchema(input);
     required.push(name);
-    return { type: "setValue", selector: input.selector, valueFrom: name };
+    return { type: "setValue", selector: input.selector, locator: input.locator, valueFrom: name };
   });
 
   if (button) {
-    replayPlan.push({ type: "click", selector: button.selector });
+    replayPlan.push({ type: "click", selector: button.selector, locator: button.locator });
   }
 
   const risk = normalizeRisk(inferDraftRisk(agentDraft) || inferActionRisk(`${prompt} ${button?.text ?? ""}`));
   if (risk === "read" && summary?.tables?.[0]) {
-    replayPlan.push({ type: "extractTable", selector: summary.tables[0].selector });
+    replayPlan.push({ type: "extractTable", selector: summary.tables[0].selector, locator: summary.tables[0].locator });
   }
 
   const nameSource =
@@ -382,7 +470,7 @@ function buildExtraActionTools(summary, primaryName) {
           properties: {},
           required: [],
         },
-        replayPlan: [{ type: "click", selector: button.selector }],
+        replayPlan: [{ type: "click", selector: button.selector, locator: button.locator }],
       };
     });
 }
@@ -632,6 +720,10 @@ function asArray(value) {
   }
 
   return value === undefined || value === null ? [] : [value];
+}
+
+function nonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
 function summarizeAgentDraft(agentDraft) {

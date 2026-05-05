@@ -121,6 +121,7 @@ MINIMAX_API_URL=https://api.minimax.io/v1/chat/completions
 MINIMAX_MODEL=MiniMax-M2.7
 MINIMAX_TIMEOUT_MS=20000
 VITE_AGENT_COMPILE_TIMEOUT_MS=20000
+VITE_AGENT_TASK_PLAN_TIMEOUT_MS=12000
 ```
 
 Then start the proxy and frontend in two terminals:
@@ -138,12 +139,32 @@ The proxy loads `.env.local` automatically. The frontend only exposes `VITE_*` v
 Expected proxy endpoints:
 
 - `POST /compile-tool-group`
+- `POST /plan-workflow`
 - `POST /compile`
 - `POST /parse-command`
 
 The proxy owns API keys, model selection, rate limits, retries, and provider logs. The extension keeps schema validation, approval, replay, Guard decisions, redaction, and audit local.
 
 If the proxy is not configured or the model returns invalid JSON, Graft Guard falls back to the deterministic local compiler and labels the workflow as `local fallback`.
+
+## Real-Site Compile Smoke Tests
+
+Use this branch to test non-demo sites in increasing difficulty:
+
+1. [Selenium Web Form](https://www.selenium.dev/selenium/web/web-form.html)
+   - Prompt: `Create a reusable tool to fill this form and submit it.`
+   - Expected: compiles one write tool with semantic locators for text, textarea, select/range/date controls.
+2. [QA Playground](https://www.qaplayground.com/)
+   - Prompt: `Create reusable tools to search a table and extract matching rows.`
+   - Expected: collector observes ARIA roles, table/grid regions, and buttons without hanging.
+3. [The Dummy Site](https://thedummysite.com/)
+   - Prompt: `Create a reusable tool to update a profile form without changing the password.`
+   - Expected: password fields are skipped; normal profile fields are summarized.
+4. [Automation Exercise](https://automationexercise.com/)
+   - Prompt: `Create a reusable tool to search for a product and add it to cart with approval.`
+   - Expected: storefront navigation/actions compile; write/cart action is guarded.
+
+Run Shopify/Ozcart admin only after these pass. Admin SPAs add auth state, dynamic Polaris widgets, and virtualized lists, so failures are harder to diagnose until the collector and semantic locator baseline is green.
 
 ## Current Scope
 

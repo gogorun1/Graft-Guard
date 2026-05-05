@@ -1,4 +1,7 @@
 import type { ToolSchema } from "./schemaTypes";
+import type { PageDomSummary } from "../extension/pageSummary";
+import type { WorkflowPlanStep } from "./agentCompiler";
+import { configuredAgentProvider, miniMaxProxyUrl } from "./minimaxClient";
 
 export type WorkflowRunInputs = {
   status: "all" | "overdue" | "pending" | "paid";
@@ -16,6 +19,16 @@ export type WorkflowTaskPlan = {
   missingCapabilities: string[];
   inputs: WorkflowRunInputs;
 };
+
+export type AgentTaskPlannerInput = {
+  prompt: string;
+  tools: ToolSchema[];
+  inputs: WorkflowRunInputs;
+  pageSummary?: PageDomSummary;
+  workflowPlan?: WorkflowPlanStep[];
+};
+
+const defaultTaskPlannerTimeoutMs = 12000;
 
 const vendorPaymentTools = [
   "searchInvoices",
@@ -118,6 +131,94 @@ export function planWorkflowTask(
     missingCapabilities: ["workflow planner for this task"],
     inputs,
   };
+}
+
+export async function planWorkflowTaskWithAgent(input: AgentTaskPlannerInput): Promise<WorkflowTaskPlan> {
+  const fallback = planWorkflowTask(input.prompt, input.tools, input.inputs);
+  if (configuredAgentProvider() !== "minimax" || !miniMaxProxyUrl()) {
+    return fallback;
+  }
+
+  const timeoutMs = taskPlannerTimeoutMs();
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${miniMaxProxyUrl()}/plan-workflow`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: input.prompt,
+        tools: summarizeTools(input.tools),
+        inputs: input.inputs,
+        pageSummary: input.pageSummary,
+        workflowPlan: input.workflowPlan ?? [],
+        fallback,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Agent task planner failed: ${response.status}`);
+    }
+
+    return normalizeTaskPlan((await response.json()) as Partial<WorkflowTaskPlan>, fallback, input);
+  } catch {
+    return fallback;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function normalizeTaskPlan(
+  candidate: Partial<WorkflowTaskPlan>,
+  fallback: WorkflowTaskPlan,
+  input: AgentTaskPlannerInput,
+): WorkflowTaskPlan {
+  const toolNames = new Set(input.tools.map((tool) => tool.name));
+  const reusedTools = stringArray(candidate.reusedTools).filter((tool) => toolNames.has(tool));
+  const guardedTools = stringArray(candidate.guardedTools).filter((tool) => toolNames.has(tool));
+  const missingCapabilities = stringArray(candidate.missingCapabilities);
+  const status =
+    candidate.status === "ready" || candidate.status === "partial" || candidate.status === "needs_tools"
+      ? candidate.status
+      : missingCapabilities.length > 0
+        ? reusedTools.length > 0
+          ? "partial"
+          : "needs_tools"
+        : "ready";
+
+  return {
+    prompt: input.prompt,
+    title: nonEmptyString(candidate.title) ?? fallback.title,
+    summary: nonEmptyString(candidate.summary) ?? fallback.summary,
+    status,
+    reusedTools: reusedTools.length > 0 ? reusedTools : fallback.reusedTools,
+    guardedTools: guardedTools.length > 0 ? guardedTools : fallback.guardedTools,
+    missingCapabilities,
+    inputs: input.inputs,
+  };
+}
+
+function summarizeTools(tools: ToolSchema[]): Array<Pick<ToolSchema, "name" | "description" | "risk">> {
+  return tools.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    risk: tool.risk,
+  }));
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function taskPlannerTimeoutMs(): number {
+  const configured = Number(import.meta.env.VITE_AGENT_TASK_PLAN_TIMEOUT_MS);
+  return Number.isFinite(configured) && configured > 0 ? configured : defaultTaskPlannerTimeoutMs;
 }
 
 function planMissingWorkflow(

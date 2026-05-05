@@ -28,7 +28,7 @@ export function compileCapturedWorkflow(steps: CapturedStep[], page?: PageDomSum
         warnings.push(`Selector may be dynamic: ${step.selector}`);
       }
 
-      return { type: "click" as const, selector: step.selector };
+      return { type: "click" as const, selector: step.selector, locator: step.locator };
     }
 
     const name = uniqueName(inferParameterName(step), usedNames);
@@ -39,11 +39,11 @@ export function compileCapturedWorkflow(steps: CapturedStep[], page?: PageDomSum
       warnings.push(`Selector may be dynamic: ${step.selector}`);
     }
 
-    return { type: "setValue" as const, selector: step.selector, valueFrom: name };
+    return { type: "setValue" as const, selector: step.selector, locator: step.locator, valueFrom: name };
   });
 
   if (risk === "read" && page?.tables[0]) {
-    replayPlan.push({ type: "extractTable", selector: page.tables[0].selector });
+    replayPlan.push({ type: "extractTable", selector: page.tables[0].selector, locator: page.tables[0].locator });
   }
 
   const properties = Array.from(parameterNames.values()).reduce<Record<string, unknown>>((record, name) => {

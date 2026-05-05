@@ -1,9 +1,24 @@
 export type RiskLevel = "read" | "write" | "export" | "destructive";
 
+export type LocatorSpec = {
+  css?: string;
+  role?: string;
+  name?: string;
+  label?: string;
+  placeholder?: string;
+  text?: string;
+  testId?: string;
+  tagName?: string;
+  type?: string;
+  within?: LocatorSpec;
+  alternatives?: LocatorSpec[];
+  confidence?: number;
+};
+
 export type ReplayStep =
-  | { type: "setValue"; selector: string; valueFrom: string }
-  | { type: "click"; selector: string }
-  | { type: "extractTable"; selector: string };
+  | { type: "setValue"; selector: string; valueFrom: string; locator?: LocatorSpec }
+  | { type: "click"; selector: string; locator?: LocatorSpec }
+  | { type: "extractTable"; selector: string; locator?: LocatorSpec };
 
 export type ToolSchema = {
   name: string;
