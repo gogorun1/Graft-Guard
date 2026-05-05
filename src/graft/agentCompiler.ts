@@ -2,6 +2,7 @@ import type { PageDomSummary } from "../extension/pageSummary";
 import { configuredAgentProvider, miniMaxProxyUrl } from "./minimaxClient";
 import type { ToolSchema } from "./schemaTypes";
 import { vendorPaymentSchemas } from "./schemaCompiler";
+import { compileWebsiteIntent } from "./websiteIntentCompiler";
 
 export type WorkflowPlanStep = {
   tool: string;
@@ -33,11 +34,11 @@ export async function compileToolGroupWithAgent(input: AgentCompilerInput): Prom
       validateCompiledToolGroup(response);
       return { ...response, provider: "agent-api" };
     } catch (error) {
-      return compileLocalVendorPaymentGroup(input, error);
+      return compileLocalToolGroup(input, error);
     }
   }
 
-  return compileLocalVendorPaymentGroup(input);
+  return compileLocalToolGroup(input);
 }
 
 export function isVendorPaymentPage(summary: PageDomSummary): boolean {
@@ -85,6 +86,30 @@ export function compileLocalVendorPaymentGroup(
   };
 }
 
+function compileLocalToolGroup(
+  input: AgentCompilerInput,
+  fallbackReason?: unknown,
+): CompiledToolGroup {
+  if (isVendorPaymentPage(input.pageSummary)) {
+    return compileLocalVendorPaymentGroup(input, fallbackReason);
+  }
+
+  const candidate = compileWebsiteIntent(input.prompt, input.pageSummary);
+  const reason =
+    fallbackReason instanceof Error
+      ? `Agent API fallback: ${fallbackReason.message}`
+      : "Local deterministic website workflow compiler";
+
+  return {
+    name: `${candidate.schema.name} workflow`,
+    description: candidate.schema.description,
+    tools: [candidate.schema],
+    workflowPlan: [{ tool: candidate.schema.name }],
+    riskNotes: [reason, ...candidate.warnings],
+    provider: "local-fallback",
+  };
+}
+
 async function callAgentCompiler(input: AgentCompilerInput): Promise<AgentCompilerResponse> {
   const response = await fetch(`${miniMaxProxyUrl()}/compile-tool-group`, {
     method: "POST",
@@ -113,11 +138,14 @@ function validateCompiledToolGroup(group: AgentCompilerResponse): void {
     if (!tool.name || !tool.risk || !tool.inputSchema || !Array.isArray(tool.replayPlan)) {
       throw new Error(`Invalid tool schema from agent compiler: ${tool.name || "(unnamed)"}`);
     }
-  }
 
-  const bankTool = group.tools.find((tool) => tool.name === "exportBankDetails");
-  if (!bankTool || bankTool.risk !== "export") {
-    throw new Error("Agent compiler did not mark exportBankDetails as guarded export.");
+    if (!["read", "write", "export", "destructive"].includes(tool.risk)) {
+      throw new Error(`Invalid risk level from agent compiler: ${tool.risk}`);
+    }
+
+    if (tool.name === "exportBankDetails" && tool.risk !== "export") {
+      throw new Error("Agent compiler did not mark exportBankDetails as guarded export.");
+    }
   }
 
   for (const step of group.workflowPlan ?? []) {

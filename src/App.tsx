@@ -21,7 +21,6 @@ import {
   savePageSchema,
   type CandidateTool,
 } from "./graft/capturedWorkflowCompiler";
-import { compileWebsiteIntent } from "./graft/websiteIntentCompiler";
 import { activeParserLabel, parseNaturalLanguageCommand } from "./graft/commandParser";
 import { compileApp, loadCachedSchemas } from "./graft/schemaCompiler";
 import { replayTool } from "./graft/replayEngine";
@@ -29,7 +28,6 @@ import type { ReplayResult, ReplayTrace, ToolSchema } from "./graft/schemaTypes"
 import { requiresApproval } from "./graft/guardEngine";
 import {
   compileToolGroupWithAgent,
-  isVendorPaymentPage,
   type CompiledToolGroup,
 } from "./graft/agentCompiler";
 import {
@@ -253,39 +251,20 @@ export default function App() {
 
       const effectiveIntent = websiteIntent.trim() || defaultWebsiteIntent;
       setCommand(effectiveIntent);
-      if (isVendorPaymentPage(summary)) {
-        const group = await compileToolGroupWithAgent({ prompt: effectiveIntent, pageSummary: summary });
-        setCompiledToolGroup(group);
-        setSchemas(group.tools);
-        setSelectedToolName(group.tools[0]?.name ?? "searchInvoices");
-        addAudit({
-          type: "learned_tool",
-          toolName: group.name,
-          risk: "read",
-          message: `Compiled ${group.name} by ${group.provider === "agent-api" ? "Agent API" : "local fallback"}`,
-          llmCalls: group.provider === "agent-api" ? 1 : 0,
-        });
-        return;
+      const group = await compileToolGroupWithAgent({ prompt: effectiveIntent, pageSummary: summary });
+      let savedTools = group.tools;
+      for (const tool of group.tools) {
+        savedTools = savePageSchema(summary, tool);
       }
-
-      const pageSchemas = loadPageSchemas(summary);
-      setSchemas(pageSchemas);
-      const candidate = compileWebsiteIntent(effectiveIntent, summary);
-      setCandidateTool(candidate);
-      setSelectedToolName(candidate.schema.name);
-      addAgentMessage({
-        type: "compile_succeeded",
-        schema: candidate.schema,
-        warnings: candidate.warnings,
-        summary,
-        source: "website",
-      });
+      setCompiledToolGroup(group);
+      setSchemas(savedTools);
+      setSelectedToolName(group.tools[0]?.name ?? "generatedTool");
       addAudit({
         type: "learned_tool",
-        toolName: candidate.schema.name,
-        risk: candidate.schema.risk,
-        message: `Suggested ${candidate.schema.name} from website intent`,
-        llmCalls: 0,
+        toolName: group.name,
+        risk: "read",
+        message: `Compiled ${group.name} by ${group.provider === "agent-api" ? "Agent API" : "local fallback"}`,
+        llmCalls: group.provider === "agent-api" ? 1 : 0,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Website compile failed";
@@ -409,6 +388,11 @@ export default function App() {
   async function handleRun() {
     if (isVendorPaymentRequest(command) && (!isExtension || compiledToolGroup)) {
       await runVendorPaymentWorkflow();
+      return;
+    }
+
+    if (compiledToolGroup && selectedSchema) {
+      handleRunSelectedTool();
       return;
     }
 

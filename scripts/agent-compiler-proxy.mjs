@@ -45,24 +45,19 @@ server.listen(port, "127.0.0.1", () => {
 async function callCompiler(body) {
   const prompt = [
     "You are the Graft Guard Agent Compiler.",
-    "Return only strict JSON. Do not include markdown.",
-    "Do not include <think> tags, reasoning, explanations, or commentary.",
-    "Your JSON must match this TypeScript contract exactly:",
+    "Read the user's goal and the page summary, then produce an AgentDraft JSON object.",
+    "You are not responsible for browser replay selectors. Graft Guard will compile your semantic draft into executable tools.",
+    "AgentDraft shape:",
     "{",
-    '  "name": "Vendor payment workflow",',
-    '  "description": "Prepare a guarded payment packet from overdue vendor invoices.",',
-    '  "tools": ToolSchema[],',
-    '  "workflowPlan": WorkflowPlanStep[],',
-    '  "riskNotes": string[]',
+    '  "goal": string,',
+    '  "capabilities": string[],',
+    '  "workflow": string[],',
+    '  "risks": [{ "type": string, "target": string, "reason": string }],',
+    '  "proposedTools": [{ "name": string, "description": string, "risk": "read" | "write" | "export" | "destructive" }]',
     "}",
-    "ToolSchema = { name: string, description: string, risk: 'read' | 'write' | 'export' | 'destructive', inputSchema: { type: 'object', properties: object, required: string[] }, replayPlan: ReplayStep[] }",
-    "ReplayStep = { type: 'setValue', selector: string, valueFrom: string } | { type: 'click', selector: string } | { type: 'extractTable', selector: string }",
-    "WorkflowPlanStep = { tool: string, args?: object, forEach?: string, guard?: boolean }",
-    "Use exactly these four reusable tool names when the page is a vendor invoice workflow: searchInvoices, openInvoice, extractPaymentPacket, exportBankDetails.",
-    "Use risk='export' for exportBankDetails. Do not use risk values like medium/high.",
-    "Every tool must include inputSchema and replayPlan.",
-    "workflowPlan must be an array, not a string.",
-    "Do not include id, inputMappings, riskReason, or prose outside JSON.",
+    "Use the page controls and table headers to infer reusable capabilities.",
+    "Call out sensitive data, exports, destructive actions, and write actions as risks.",
+    "Output JSON only if possible. If your provider emits reasoning, still include a parseable JSON object.",
     "",
     "User prompt:",
     body.prompt,
@@ -114,7 +109,7 @@ function normalizeCompilerResponse(parsed, body) {
     return buildVendorPaymentToolGroup(parsed, body);
   }
 
-  return parsed;
+  return buildGenericToolGroup(parsed, body);
 }
 
 function isVendorPaymentToolGroup(value) {
@@ -252,25 +247,373 @@ function buildVendorPaymentToolGroup(agentDraft, body) {
   };
 }
 
+function buildGenericToolGroup(agentDraft, body) {
+  const summary = body?.pageSummary ?? {};
+  const prompt = String(body?.prompt ?? "");
+  const primaryButton = chooseButton(prompt, agentDraft, summary?.buttons ?? []);
+  const primaryTool = buildGenericTool(agentDraft, summary, prompt, primaryButton);
+  const extraTools = buildExtraActionTools(summary, primaryTool.name);
+  const tools = [primaryTool, ...extraTools];
+
+  return {
+    name: toTitle(agentDraft?.goal || prompt || summary?.title || "Website workflow"),
+    description: describeGenericWorkflow(agentDraft, summary, prompt),
+    tools,
+    workflowPlan: [
+      { tool: primaryTool.name },
+      ...extraTools
+        .filter((tool) => promptMentions(prompt, tool.name) || promptMentionsRisk(prompt, tool.risk))
+        .map((tool) => ({ tool: tool.name, guard: tool.risk === "export" || tool.risk === "destructive" })),
+    ],
+    riskNotes: [
+      "MiniMax produced an AgentDraft; Graft Guard normalized it into reusable tools and an executable workflow plan.",
+      ...summarizeAgentDraft(agentDraft),
+      ...tools
+        .filter((tool) => tool.risk === "export" || tool.risk === "destructive")
+        .map((tool) => `${tool.name} requires Guard review because it is ${tool.risk}.`),
+    ],
+  };
+}
+
+function buildGenericTool(agentDraft, summary, prompt, button) {
+  const inputs = usableInputs(summary?.inputs ?? []);
+  const usedNames = new Set();
+  const properties = {};
+  const required = [];
+  const replayPlan = inputs.map((input) => {
+    const name = uniqueName(inferInputName(input), usedNames);
+    properties[name] = inferInputSchema(input);
+    required.push(name);
+    return { type: "setValue", selector: input.selector, valueFrom: name };
+  });
+
+  if (button) {
+    replayPlan.push({ type: "click", selector: button.selector });
+  }
+
+  const risk = normalizeRisk(inferDraftRisk(agentDraft) || inferActionRisk(`${prompt} ${button?.text ?? ""}`));
+  if (risk === "read" && summary?.tables?.[0]) {
+    replayPlan.push({ type: "extractTable", selector: summary.tables[0].selector });
+  }
+
+  const nameSource =
+    firstProposedTool(agentDraft)?.name ||
+    button?.text ||
+    firstCapability(agentDraft) ||
+    prompt ||
+    "website workflow";
+
+  const name = uniqueToolName(toCamelCase(nameSource), new Set());
+
+  return {
+    name,
+    description: firstProposedTool(agentDraft)?.description || `${name} generated from ${summary?.title ?? "this page"}`,
+    risk,
+    inputSchema: {
+      type: "object",
+      properties,
+      required,
+    },
+    replayPlan,
+  };
+}
+
+function buildExtraActionTools(summary, primaryName) {
+  const usedNames = new Set([primaryName]);
+  return (summary?.buttons ?? [])
+    .filter((button) => /\b(export|download|csv|xlsx|pdf|delete|remove|revoke)\b/i.test(button.text))
+    .map((button) => {
+      const name = uniqueToolName(toCamelCase(button.text || "page action"), usedNames);
+      return {
+        name,
+        description: `${button.text || name} action generated from ${summary?.title ?? "this page"}`,
+        risk: inferActionRisk(button.text),
+        inputSchema: {
+          type: "object",
+          properties: {},
+          required: [],
+        },
+        replayPlan: [{ type: "click", selector: button.selector }],
+      };
+    });
+}
+
+function describeGenericWorkflow(agentDraft, summary, prompt) {
+  if (typeof agentDraft?.goal === "string" && agentDraft.goal.trim()) {
+    return agentDraft.goal.trim();
+  }
+
+  if (prompt.trim()) {
+    return `Workflow generated for: ${prompt.trim()}`;
+  }
+
+  return `Workflow generated from ${summary?.title ?? "the current page"}`;
+}
+
+function chooseButton(prompt, agentDraft, buttons) {
+  if (!Array.isArray(buttons) || buttons.length === 0) {
+    return undefined;
+  }
+
+  const haystack = [
+    prompt,
+    agentDraft?.goal,
+    ...asArray(agentDraft?.capabilities),
+    ...asArray(agentDraft?.workflow),
+    ...asArray(agentDraft?.proposedTools).map((tool) => `${tool?.name ?? ""} ${tool?.description ?? ""}`),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const actionWords = [
+    "export",
+    "download",
+    "submit",
+    "save",
+    "search",
+    "find",
+    "filter",
+    "add",
+    "invite",
+    "create",
+    "approve",
+    "delete",
+    "remove",
+    "revoke",
+  ];
+
+  const blockedActions = new Set();
+  if (/\b(do not|don't|without|never)\b[^.]*\bexport\b/i.test(haystack)) {
+    blockedActions.add("export");
+  }
+
+  const intentAction = actionWords.find((word) => haystack.includes(word) && !blockedActions.has(word));
+  if (intentAction) {
+    const direct = buttons.find((button) => button.text.toLowerCase().includes(intentAction));
+    if (direct) {
+      return direct;
+    }
+  }
+
+  return (
+    buttons.find((button) =>
+      /search|find|filter|submit|save|create|add|invite|approve|export|download|delete|remove|revoke/i.test(button.text),
+    ) ?? buttons[0]
+  );
+}
+
+function usableInputs(inputs) {
+  return inputs.filter((input) => !/^(submit|button|hidden|password)$/i.test(input.type));
+}
+
+function inferInputName(input) {
+  const source = input.label || input.name || input.placeholder || input.selector || "value";
+  const lowered = source.toLowerCase();
+
+  if (/\b(email|e-mail)\b/.test(lowered)) {
+    return "email";
+  }
+
+  if (/\b(date|day)\b/.test(lowered)) {
+    return "date";
+  }
+
+  if (/\b(amount|price|total|minimum|min|number|count)\b/.test(lowered)) {
+    return "amount";
+  }
+
+  if (/\b(status|state)\b/.test(lowered)) {
+    return "status";
+  }
+
+  if (/\b(name|customer|vendor|user|person)\b/.test(lowered)) {
+    return "name";
+  }
+
+  return toCamelCase(source.replace(/^#/, ""));
+}
+
+function inferInputSchema(input) {
+  if (/^(checkbox|radio)$/i.test(input.type)) {
+    return { type: "boolean", title: input.label || input.name || input.selector };
+  }
+
+  if (/^(number|range)$/i.test(input.type)) {
+    return { type: "number", title: input.label || input.name || input.selector };
+  }
+
+  if (/^date$/i.test(input.type)) {
+    return { type: "string", format: "date", title: input.label || input.name || input.selector };
+  }
+
+  return { type: "string", title: input.label || input.name || input.selector };
+}
+
+function inferDraftRisk(agentDraft) {
+  const candidates = [
+    ...asArray(agentDraft?.risks).flatMap((risk) => [risk?.type, risk?.target, risk?.reason]),
+    ...asArray(agentDraft?.proposedTools).map((tool) => tool?.risk),
+    ...asArray(agentDraft?.workflow),
+    ...asArray(agentDraft?.capabilities),
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (!candidates.trim()) {
+    return undefined;
+  }
+
+  return inferActionRisk(candidates);
+}
+
+function inferActionRisk(text) {
+  const lowered = String(text ?? "").toLowerCase();
+  if (/\b(delete|remove|destroy|revoke|terminate|drop|apply hold|block)\b/.test(lowered)) {
+    return "destructive";
+  }
+
+  if (/\b(export|download|csv|xlsx|pdf|bank|account|iban|routing|sensitive|secret|token)\b/.test(lowered)) {
+    return "export";
+  }
+
+  if (/\b(submit|save|create|add|invite|approve|update|edit|apply|send)\b/.test(lowered)) {
+    return "write";
+  }
+
+  return "read";
+}
+
+function normalizeRisk(risk) {
+  if (["read", "write", "export", "destructive"].includes(risk)) {
+    return risk;
+  }
+
+  if (/high|sensitive|export/i.test(String(risk))) {
+    return "export";
+  }
+
+  if (/medium|write|change/i.test(String(risk))) {
+    return "write";
+  }
+
+  return "read";
+}
+
+function firstProposedTool(agentDraft) {
+  return asArray(agentDraft?.proposedTools).find((tool) => tool && typeof tool === "object");
+}
+
+function firstCapability(agentDraft) {
+  return asArray(agentDraft?.capabilities).find((capability) => typeof capability === "string" && capability.trim());
+}
+
+function promptMentions(prompt, toolName) {
+  const normalizedPrompt = String(prompt ?? "").toLowerCase();
+  return toWords(toolName).some((word) => word.length > 3 && normalizedPrompt.includes(word));
+}
+
+function promptMentionsRisk(prompt, risk) {
+  const normalizedPrompt = String(prompt ?? "").toLowerCase();
+  if (risk === "export") {
+    return /\b(export|download|csv|xlsx|pdf)\b/.test(normalizedPrompt);
+  }
+
+  if (risk === "destructive") {
+    return /\b(delete|remove|revoke|terminate|destroy)\b/.test(normalizedPrompt);
+  }
+
+  return false;
+}
+
+function uniqueName(baseName, usedNames) {
+  const base = baseName || "value";
+  let next = base;
+  let index = 2;
+  while (usedNames.has(next)) {
+    next = `${base}${index}`;
+    index += 1;
+  }
+  usedNames.add(next);
+  return next;
+}
+
+function uniqueToolName(baseName, usedNames) {
+  return uniqueName(baseName || "generatedTool", usedNames);
+}
+
+function toCamelCase(value) {
+  const words = toWords(value);
+  if (words.length === 0) {
+    return "generatedTool";
+  }
+
+  return words
+    .slice(0, 6)
+    .map((word, index) => (index === 0 ? word : `${word.charAt(0).toUpperCase()}${word.slice(1)}`))
+    .join("");
+}
+
+function toTitle(value) {
+  const cleaned = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (!cleaned) {
+    return "Generated workflow";
+  }
+  return `${cleaned.charAt(0).toUpperCase()}${cleaned.slice(1)}`;
+}
+
+function toWords(value) {
+  return String(value ?? "")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[^\w\s]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.toLowerCase());
+}
+
+function asArray(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  return value === undefined || value === null ? [] : [value];
+}
+
 function summarizeAgentDraft(agentDraft) {
   if (!agentDraft || typeof agentDraft !== "object") {
     return [];
   }
 
   const notes = [];
+  if (typeof agentDraft.goal === "string") {
+    notes.push(`Goal: ${agentDraft.goal}`);
+  }
+  if (asArray(agentDraft.capabilities).length > 0) {
+    notes.push(`Capabilities: ${asArray(agentDraft.capabilities).filter(Boolean).join(", ")}`);
+  }
+  if (asArray(agentDraft.workflow).length > 0) {
+    notes.push(`Workflow: ${asArray(agentDraft.workflow).filter(Boolean).join(" -> ")}`);
+  }
   if (typeof agentDraft.description === "string") {
     notes.push(agentDraft.description);
   }
   if (typeof agentDraft.riskNotes === "string") {
     notes.push(agentDraft.riskNotes);
   }
-  if (Array.isArray(agentDraft.riskNotes)) {
-    notes.push(...agentDraft.riskNotes.filter((note) => typeof note === "string"));
+  if (asArray(agentDraft.riskNotes).length > 0) {
+    notes.push(...asArray(agentDraft.riskNotes).filter((note) => typeof note === "string"));
   }
-  if (Array.isArray(agentDraft.tools)) {
-    for (const tool of agentDraft.tools) {
+  if (asArray(agentDraft.tools).length > 0) {
+    for (const tool of asArray(agentDraft.tools)) {
       if (typeof tool?.riskReason === "string") {
         notes.push(`${tool.name ?? "tool"}: ${tool.riskReason}`);
+      }
+    }
+  }
+  if (asArray(agentDraft.risks).length > 0) {
+    for (const risk of asArray(agentDraft.risks)) {
+      if (risk?.reason || risk?.target || risk?.type) {
+        notes.push(`${risk.type ?? "risk"} ${risk.target ?? ""}: ${risk.reason ?? ""}`.trim());
       }
     }
   }
