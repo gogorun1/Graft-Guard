@@ -66,7 +66,7 @@ export function GraftPanel({
           <p>Graft Guard</p>
           <h2>Typed tools from legacy UI</h2>
         </div>
-        <span className="mode-badge">local replay</span>
+        <span className="mode-badge">{isRunning ? "local replay" : schemas.length > 0 ? "cached tools" : "ready"}</span>
       </header>
 
       {!isExtension && (
@@ -98,7 +98,7 @@ export function GraftPanel({
             >
               <span>{schema.name}</span>
               <small>
-                <b className="tool-cache-badge">{isExtension ? "Cached tool" : "AI-compiled tool"}</b>
+                <b className="tool-cache-badge">{isExtension ? "AI · Cached" : "AI-compiled tool"}</b>
                 {schema.risk}
               </small>
             </button>
@@ -111,13 +111,15 @@ export function GraftPanel({
         </div>
       </section>
 
-      <section className="panel-section">
-        <div className="section-heading">
-          <h3>Schema</h3>
-          <span>MCP-compatible</span>
-        </div>
-        <SchemaViewer schema={selectedSchema} />
-      </section>
+      {(!isExtension || selectedSchema) && (
+        <section className="panel-section">
+          <div className="section-heading">
+            <h3>Schema</h3>
+            <span>MCP-compatible</span>
+          </div>
+          <SchemaViewer schema={selectedSchema} />
+        </section>
+      )}
 
       {selectedSchema && (
         <section className="panel-section">
@@ -185,35 +187,41 @@ export function GraftPanel({
         <ApprovalCard schema={pendingApproval.schema} onAllow={onAllow} onDeny={onDeny} />
       )}
 
-      <section className="panel-section">
-        <div className="section-heading">
-          <h3>Replay trace</h3>
-          <span>LLM calls: 0</span>
-        </div>
-        {replayTrace.length === 0 ? (
-          <div className="empty-state">Trace appears after approval.</div>
-        ) : (
-          <ol className="trace-list">
-            {replayTrace.map((trace, index) => (
-              <li key={`${trace.message}-${index}`}>{trace.message}</li>
-            ))}
-          </ol>
-        )}
-        {replayResult && (
-          <div className="result-box">
-            <strong>{schemaSignature(selectedSchema ?? schemas[0])}</strong>
-            <span>{replayResult.rows.length} rows extracted from Acme ERP.</span>
+      {(!isExtension || replayTrace.length > 0 || replayResult) && (
+        <section className="panel-section">
+          <div className="section-heading">
+            <h3>Replay trace</h3>
+            <span>LLM calls: 0</span>
           </div>
-        )}
-      </section>
+          {replayTrace.length === 0 ? (
+            <div className="empty-state">Trace appears after approval.</div>
+          ) : (
+            <ol className="trace-list">
+              {replayTrace.map((trace, index) => (
+                <li key={`${trace.message}-${index}`}>{trace.message}</li>
+              ))}
+            </ol>
+          )}
+          {replayResult && (
+            <div className="result-box">
+              <strong>{schemaSignature(selectedSchema ?? schemas[0])}</strong>
+              <span>
+                {replayResult.rows.length} {isExtension ? "records extracted from the current page." : "rows extracted from Acme ERP."}
+              </span>
+            </div>
+          )}
+        </section>
+      )}
 
-      <section className="panel-section audit-section">
-        <div className="section-heading">
-          <h3>Audit timeline</h3>
-          <span>{auditEvents.length} events</span>
-        </div>
-        <AuditTimeline events={auditEvents} />
-      </section>
+      {(!isExtension || auditEvents.length > 0) && (
+        <section className="panel-section audit-section">
+          <div className="section-heading">
+            <h3>Audit timeline</h3>
+            <span>{auditEvents.length} events</span>
+          </div>
+          <AuditTimeline events={auditEvents} />
+        </section>
+      )}
     </aside>
   );
 }

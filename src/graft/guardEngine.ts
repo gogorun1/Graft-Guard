@@ -19,12 +19,16 @@ export function riskLabel(risk: RiskLevel): string {
 
 export function approvalDescription(schema: ToolSchema): string {
   if (schema.risk === "export") {
-    return "This may download customer/order data from Acme ERP.";
+    return "This may download or expose data from the current page.";
   }
 
   if (schema.risk === "destructive") {
-    return "This action is blocked in the demo unless explicitly approved.";
+    return "This action may remove or revoke data. Review the target page before allowing it.";
   }
 
-  return "This will search Acme ERP and extract matching order rows.";
+  if (schema.risk === "write") {
+    return "This may submit or modify data on the current page.";
+  }
+
+  return "This will read the current page and extract matching results or page data.";
 }

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { CapturedStep, PageDomSummary } from "../extension/pageSummary";
 import type { AgentMessage as AgentMessageModel } from "../graft/agentNarrator";
 import { schemaSignature } from "../graft/schemaCompiler";
@@ -47,8 +48,10 @@ export function ExtensionInspector({
   onStopCapture,
   onToggleAdvanced,
 }: Props) {
+  const [intentOpen, setIntentOpen] = useState(false);
   const hasWarnings = candidateWarnings.length > 0;
   const showFallback = isCapturing || advancedOpen || hasWarnings || Boolean(error);
+  const showAdvancedButton = advancedOpen || hasWarnings || Boolean(error) || Boolean(candidateSchema);
 
   return (
     <section className="extension-inspector" aria-label="Learn website">
@@ -58,41 +61,6 @@ export function ExtensionInspector({
       </div>
 
       <AgentMessageStream messages={agentMessages} />
-
-      <label className="intent-field">
-        Describe what you want to automate
-        <textarea value={intent} onChange={(event) => onIntentChange(event.target.value)} />
-      </label>
-
-      <button
-        type="button"
-        className="primary-button full-width"
-        onClick={onLearnWebsite}
-        disabled={!isExtension || isLearningWebsite}
-      >
-        {isLearningWebsite ? "Learning..." : "Learn this website"}
-      </button>
-
-      <div className="fallback-row fallback-row-single">
-        <button type="button" className="secondary-button" onClick={onToggleAdvanced}>
-          {advancedOpen ? "Hide advanced" : "Advanced"}
-        </button>
-      </div>
-
-      {!isExtension && (
-        <div className="empty-state">
-          Load the built `dist/` folder as an unpacked extension to inspect real pages.
-        </div>
-      )}
-
-      {error && <div className="error-state">{error}</div>}
-
-      {summary && (
-        <div className="learned-page-chip">
-          <strong>{summary.title}</strong>
-          <span>{summary.origin}</span>
-        </div>
-      )}
 
       {candidateSchema && (
         <div className="candidate-schema">
@@ -116,6 +84,50 @@ export function ExtensionInspector({
           </button>
         </div>
       )}
+
+      {summary && (
+        <div className="learned-page-chip">
+          <strong>{summary.title}</strong>
+          <span>{summary.origin}</span>
+        </div>
+      )}
+
+      <div className="learn-actions">
+        <button
+          type="button"
+          className="primary-button full-width"
+          onClick={onLearnWebsite}
+          disabled={!isExtension || isLearningWebsite}
+        >
+          {isLearningWebsite ? "Learning..." : candidateSchema ? "Re-learn website" : "Learn this website"}
+        </button>
+        <button type="button" className="secondary-button full-width" onClick={() => setIntentOpen((current) => !current)}>
+          {intentOpen ? "Hide intent" : "Customize intent"}
+        </button>
+      </div>
+
+      {intentOpen && (
+        <label className="intent-field">
+          Describe what you want to automate
+          <textarea value={intent} onChange={(event) => onIntentChange(event.target.value)} />
+        </label>
+      )}
+
+      {showAdvancedButton && (
+        <div className="fallback-row fallback-row-single">
+          <button type="button" className="secondary-button" onClick={onToggleAdvanced}>
+            {advancedOpen ? "Hide advanced" : "Advanced"}
+          </button>
+        </div>
+      )}
+
+      {!isExtension && (
+        <div className="empty-state">
+          Load the built `dist/` folder as an unpacked extension to inspect real pages.
+        </div>
+      )}
+
+      {error && <div className="error-state">{error}</div>}
 
       {showFallback && (
         <div className="show-once-card">

@@ -678,6 +678,12 @@ textarea {
   font-weight: 800;
 }
 
+.learn-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .intent-field textarea {
   min-height: 70px;
 }
