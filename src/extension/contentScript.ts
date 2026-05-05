@@ -119,24 +119,51 @@ function handleCapturedClick(event: MouseEvent) {
 }
 
 async function resumeCaptureIfSessionActive() {
-  try {
-    const response = (await chrome.runtime.sendMessage({
-      type: "GRAFT_GUARD_CAPTURE_STATUS",
-    } satisfies BackgroundMessage)) as { ok: true; active: boolean };
+  const response = await sendRuntimeMessage<{ ok: true; active: boolean }>({
+    type: "GRAFT_GUARD_CAPTURE_STATUS",
+  } satisfies BackgroundMessage);
 
-    if (response.active) {
-      startCapture();
-    }
-  } catch {
-    // Content script can load before the background service worker is ready.
+  if (response?.active) {
+    startCapture();
   }
 }
 
 function reportCapturedStep(step: CapturedStep) {
-  void chrome.runtime.sendMessage({
+  void sendRuntimeMessage({
     type: "GRAFT_GUARD_CAPTURE_STEP",
     step,
   } satisfies BackgroundMessage);
+}
+
+async function sendRuntimeMessage<T>(message: BackgroundMessage): Promise<T | undefined> {
+  try {
+    if (!isRuntimeAvailable()) {
+      stopCapture();
+      return undefined;
+    }
+
+    return (await chrome.runtime.sendMessage(message)) as T;
+  } catch (error) {
+    if (isExtensionContextInvalidated(error)) {
+      stopCapture();
+      return undefined;
+    }
+
+    // The background service worker can be waking up or unavailable during tab transitions.
+    return undefined;
+  }
+}
+
+function isRuntimeAvailable(): boolean {
+  try {
+    return Boolean(chrome.runtime?.id);
+  } catch {
+    return false;
+  }
+}
+
+function isExtensionContextInvalidated(error: unknown): boolean {
+  return errorMessage(error).includes("Extension context invalidated");
 }
 
 async function replayToolOnPage(
