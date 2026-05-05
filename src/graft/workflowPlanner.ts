@@ -1,7 +1,7 @@
 import type { ToolSchema } from "./schemaTypes";
 
 export type WorkflowRunInputs = {
-  status: "overdue";
+  status: "all" | "overdue" | "pending" | "paid";
   minAmount: number;
   riskFilter: "all" | "low-risk-only";
 };
@@ -34,19 +34,20 @@ export function defaultWorkflowRunInputs(): WorkflowRunInputs {
 
 export function inferWorkflowRunInputs(prompt: string, current = defaultWorkflowRunInputs()): WorkflowRunInputs {
   return {
-    status: "overdue",
+    status: inferInvoiceStatus(prompt) ?? current.status,
     minAmount: inferMinAmount(prompt) ?? current.minAmount,
     riskFilter: inferRiskFilter(prompt) ?? current.riskFilter,
   };
 }
 
 export function formatVendorPaymentPrompt(inputs: WorkflowRunInputs): string {
+  const statusText = inputs.status === "all" ? "all invoices" : `${inputs.status} invoices`;
   const riskText =
     inputs.riskFilter === "low-risk-only"
       ? " Include only low-risk vendors."
       : "";
 
-  return `Prepare a vendor payment packet for overdue invoices above EUR ${inputs.minAmount.toLocaleString("en-US")}, but do not export bank details without approval.${riskText}`;
+  return `Prepare a vendor payment packet for ${statusText} above EUR ${inputs.minAmount.toLocaleString("en-US")}, but do not export bank details without approval.${riskText}`;
 }
 
 export function planWorkflowTask(
@@ -152,6 +153,26 @@ function inferMinAmount(prompt: string): number | undefined {
 
   const amount = Number(amountMatch[1].replace(/,/g, ""));
   return Number.isFinite(amount) ? amount : undefined;
+}
+
+function inferInvoiceStatus(prompt: string): WorkflowRunInputs["status"] | undefined {
+  if (/\ball invoices?\b/i.test(prompt)) {
+    return "all";
+  }
+
+  if (/\boverdue invoices?\b/i.test(prompt)) {
+    return "overdue";
+  }
+
+  if (/\bpending invoices?\b/i.test(prompt)) {
+    return "pending";
+  }
+
+  if (/\bpaid invoices?\b/i.test(prompt)) {
+    return "paid";
+  }
+
+  return undefined;
 }
 
 function inferRiskFilter(prompt: string): WorkflowRunInputs["riskFilter"] | undefined {

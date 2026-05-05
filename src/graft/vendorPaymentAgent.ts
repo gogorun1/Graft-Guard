@@ -30,10 +30,13 @@ export type VendorAgentRun = {
   packet?: PaymentPacket;
 };
 
-export function parseVendorPaymentRequest(request: string): { status: "overdue"; minAmount: number } {
+export function parseVendorPaymentRequest(request: string): { status: WorkflowRunInputs["status"]; minAmount: number } {
   const amountMatch = request.match(/(?:above|over|greater than|>)\s*(?:eur|€)?\s*([\d,]+)/i);
   const minAmount = amountMatch ? Number(amountMatch[1].replace(/,/g, "")) : 5000;
-  return { status: "overdue", minAmount: Number.isFinite(minAmount) ? minAmount : 5000 };
+  return {
+    status: inferInvoiceStatus(request),
+    minAmount: Number.isFinite(minAmount) ? minAmount : 5000,
+  };
 }
 
 export function startVendorPaymentWorkflow(request: string, inputs?: WorkflowRunInputs): VendorAgentRun {
@@ -106,13 +109,33 @@ export function finishVendorPaymentWorkflow(invoiceIds: string[], includeBankDet
   };
 }
 
-function searchInvoices(status: "overdue", minAmount: number, riskFilter: WorkflowRunInputs["riskFilter"]): Invoice[] {
+function searchInvoices(
+  status: WorkflowRunInputs["status"],
+  minAmount: number,
+  riskFilter: WorkflowRunInputs["riskFilter"],
+): Invoice[] {
   return mockInvoices.filter(
     (invoice) =>
-      invoice.status === status &&
+      (status === "all" || invoice.status === status) &&
       invoice.amount >= minAmount &&
       (riskFilter === "all" || invoice.riskFlag === "none"),
   );
+}
+
+function inferInvoiceStatus(request: string): WorkflowRunInputs["status"] {
+  if (/\ball invoices?\b/i.test(request)) {
+    return "all";
+  }
+
+  if (/\bpending invoices?\b/i.test(request)) {
+    return "pending";
+  }
+
+  if (/\bpaid invoices?\b/i.test(request)) {
+    return "paid";
+  }
+
+  return "overdue";
 }
 
 function openInvoice(invoiceId: string): Invoice {

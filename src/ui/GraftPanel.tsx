@@ -315,7 +315,10 @@ export function GraftPanel({
                     onWorkflowInputChange({ ...workflowInputs, status: event.target.value as WorkflowRunInputs["status"] })
                   }
                 >
+                  <option value="all">All</option>
                   <option value="overdue">Overdue</option>
+                  <option value="pending">Pending</option>
+                  <option value="paid">Paid</option>
                 </select>
               </label>
               <label>
