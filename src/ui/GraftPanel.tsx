@@ -112,11 +112,19 @@ export function GraftPanel({
             {(selectedSchema.inputSchema.required ?? []).map((name) => (
               <label key={name}>
                 {name}
-                <input
-                  type={inputTypeForProperty(selectedSchema.inputSchema.properties[name])}
-                  value={toolParams[name] ?? ""}
-                  onChange={(event) => onToolParamChange(name, event.target.value)}
-                />
+                {isBooleanProperty(selectedSchema.inputSchema.properties[name]) ? (
+                  <input
+                    type="checkbox"
+                    checked={toolParams[name] === "true"}
+                    onChange={(event) => onToolParamChange(name, event.target.checked ? "true" : "false")}
+                  />
+                ) : (
+                  <input
+                    type={inputTypeForProperty(selectedSchema.inputSchema.properties[name])}
+                    value={toolParams[name] ?? ""}
+                    onChange={(event) => onToolParamChange(name, event.target.value)}
+                  />
+                )}
               </label>
             ))}
             {(selectedSchema.inputSchema.required ?? []).length === 0 && (
@@ -197,5 +205,23 @@ function inputTypeForProperty(property: unknown): string {
     return "number";
   }
 
+  if (
+    property &&
+    typeof property === "object" &&
+    "type" in property &&
+    property.type === "boolean"
+  ) {
+    return "checkbox";
+  }
+
   return "text";
+}
+
+function isBooleanProperty(property: unknown): boolean {
+  return Boolean(
+    property &&
+      typeof property === "object" &&
+      "type" in property &&
+      property.type === "boolean",
+  );
 }

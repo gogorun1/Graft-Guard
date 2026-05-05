@@ -91,7 +91,15 @@ function typeLabel(property: unknown): string {
     "type" in property &&
     typeof property.type === "string"
   ) {
-    return property.type === "number" ? "Number" : "String";
+    if (property.type === "number") {
+      return "Number";
+    }
+
+    if (property.type === "boolean") {
+      return "Boolean";
+    }
+
+    return "String";
   }
 
   return "unknown";

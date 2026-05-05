@@ -465,5 +465,14 @@ function coerceParamValue(property: unknown, value: string): unknown {
     return Number(value);
   }
 
+  if (
+    property &&
+    typeof property === "object" &&
+    "type" in property &&
+    property.type === "boolean"
+  ) {
+    return value === "true" || value === "checked" || value === "on";
+  }
+
   return value;
 }
