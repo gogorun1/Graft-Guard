@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { AuditTimeline } from "./AuditTimeline";
 import { ApprovalCard } from "./ApprovalCard";
 import { SchemaViewer } from "./SchemaViewer";
@@ -67,6 +68,8 @@ export function GraftPanel({
   onToolParamChange,
   onUsePreset,
 }: Props) {
+  const [compiledTab, setCompiledTab] = useState<"workflow" | "tools">("workflow");
+
   return (
     <aside className="graft-panel" aria-label="Graft Guard panel">
       {!isExtension && (
@@ -95,20 +98,71 @@ export function GraftPanel({
 
       {compiledToolGroup && (
         <section className="panel-section">
-          <div className="section-heading">
-            <h3>Compiled workflow</h3>
+          <div className="section-heading compiled-section-heading">
+            <div className="compiled-tabs" role="tablist" aria-label="Compiled output">
+              <button
+                type="button"
+                className={compiledTab === "workflow" ? "active" : ""}
+                onClick={() => setCompiledTab("workflow")}
+              >
+                Compiled workflow
+              </button>
+              <button
+                type="button"
+                className={compiledTab === "tools" ? "active" : ""}
+                onClick={() => setCompiledTab("tools")}
+              >
+                Generated tools
+              </button>
+            </div>
             <span>{compiledToolGroup.provider === "agent-api" ? "Agent API" : "local fallback"}</span>
           </div>
-          <div className="compiled-workflow-card">
-            <strong>{compiledToolGroup.name}</strong>
-            <span>{compiledToolGroup.description}</span>
-            <small>{compiledToolGroup.tools.length} typed tools · {compiledToolGroup.workflowPlan.length} planned steps</small>
-            <div className="compiled-tool-pills" aria-label="Compiled tools">
-              {compiledToolGroup.tools.map((tool) => (
-                <span key={tool.name}>{tool.name}</span>
-              ))}
+
+          {compiledTab === "workflow" ? (
+            <div className="compiled-workflow-card">
+              <strong>{compiledToolGroup.name}</strong>
+              <span>{compiledToolGroup.description}</span>
+              <div className="compiled-workflow-group">
+                <h4>{compiledToolGroup.workflowPlan.length} planned steps</h4>
+                <ol className="compiled-step-list">
+                  {compiledToolGroup.workflowPlan.map((step, index) => (
+                    <li key={`${step.tool}-${index}`}>
+                      <span>{step.tool}</span>
+                      {step.guard && <b>Guard</b>}
+                    </li>
+                  ))}
+                </ol>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="compiled-workflow-card">
+              <div className="compiled-workflow-group">
+                <h4>{compiledToolGroup.tools.length} typed tools</h4>
+                <div className="generated-tool-list">
+                  {compiledToolGroup.tools.map((tool) => (
+                    <button
+                      type="button"
+                      key={tool.name}
+                      className={selectedSchema?.name === tool.name ? "selected" : ""}
+                      onClick={() => onSelectSchema(tool)}
+                    >
+                      <span>
+                        <strong>{tool.name}</strong>
+                        <small>{tool.description}</small>
+                      </span>
+                      <b>{tool.risk}</b>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="compiled-tool-pills" aria-label="Reusable tool names">
+                {compiledToolGroup.tools.map((tool) => (
+                  <span key={tool.name}>{tool.name}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {isExtension && (
             <button
               type="button"
@@ -119,6 +173,36 @@ export function GraftPanel({
               {isRunning ? "Running..." : "Run workflow"}
             </button>
           )}
+        </section>
+      )}
+
+      {!compiledToolGroup && (
+        <section className="panel-section">
+          <div className="section-heading">
+            <h3>Compiled tools</h3>
+            <span>{schemas.length}</span>
+          </div>
+          <div className="tool-list">
+            {schemas.map((schema) => (
+              <button
+                type="button"
+                key={schema.name}
+                className={selectedSchema?.name === schema.name ? "selected" : ""}
+                onClick={() => onSelectSchema(schema)}
+              >
+                <span>{schema.name}</span>
+                <small>
+                  <b className="tool-cache-badge">{isExtension ? "Compiled · Cached" : "Compiled tool"}</b>
+                  {schema.risk}
+                </small>
+              </button>
+            ))}
+            {schemas.length === 0 && (
+              <div className="empty-state">
+                {isExtension ? "Compile this website to create a saved tool." : "Click compile to create tools."}
+              </div>
+            )}
+          </div>
         </section>
       )}
 
@@ -146,34 +230,6 @@ export function GraftPanel({
           )}
         </section>
       )}
-
-      <section className="panel-section">
-        <div className="section-heading">
-          <h3>Compiled tools</h3>
-          <span>{schemas.length}</span>
-        </div>
-        <div className="tool-list">
-          {schemas.map((schema) => (
-            <button
-              type="button"
-              key={schema.name}
-              className={selectedSchema?.name === schema.name ? "selected" : ""}
-              onClick={() => onSelectSchema(schema)}
-            >
-              <span>{schema.name}</span>
-              <small>
-                <b className="tool-cache-badge">{isExtension ? "Compiled · Cached" : "Compiled tool"}</b>
-                {schema.risk}
-              </small>
-            </button>
-          ))}
-          {schemas.length === 0 && (
-            <div className="empty-state">
-              {isExtension ? "Compile this website to create a saved tool." : "Click compile to create tools."}
-            </div>
-          )}
-        </div>
-      </section>
 
       {(!isExtension || (selectedSchema && !compiledToolGroup)) && (
         <section className="panel-section">
@@ -428,17 +484,17 @@ function numberAttribute(property: unknown, key: "minimum" | "maximum" | "step")
 function hasPropertyValue(property: unknown, key: string, expected: string): boolean {
   return Boolean(
     property &&
-      typeof property === "object" &&
-      key in property &&
-      (property as Record<string, unknown>)[key] === expected,
+    typeof property === "object" &&
+    key in property &&
+    (property as Record<string, unknown>)[key] === expected,
   );
 }
 
 function isBooleanProperty(property: unknown): boolean {
   return Boolean(
     property &&
-      typeof property === "object" &&
-      "type" in property &&
-      property.type === "boolean",
+    typeof property === "object" &&
+    "type" in property &&
+    property.type === "boolean",
   );
 }
