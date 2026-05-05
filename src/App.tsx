@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DemoErp } from "./demo-erp/DemoErp";
 import {
   collectActivePageSummary,
   isExtensionRuntime,
+  replayActivePageTool,
   startActivePageCapture,
   stopActivePageCapture,
 } from "./extension/targetPageClient";
@@ -33,6 +34,7 @@ export default function App() {
   const [schemas, setSchemas] = useState<ToolSchema[]>(() => loadCachedSchemas());
   const [selectedToolName, setSelectedToolName] = useState("queryOrders");
   const [command, setCommand] = useState(presetCommand);
+  const [toolParams, setToolParams] = useState<Record<string, string>>({});
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval>();
   const [replayTrace, setReplayTrace] = useState<ReplayTrace[]>([]);
@@ -51,6 +53,21 @@ export default function App() {
     () => schemas.find((schema) => schema.name === selectedToolName) ?? schemas[0],
     [schemas, selectedToolName],
   );
+
+  useEffect(() => {
+    if (!selectedSchema) {
+      setToolParams({});
+      return;
+    }
+
+    setToolParams((current) => {
+      const next = { ...current };
+      for (const key of selectedSchema.inputSchema.required ?? []) {
+        next[key] = next[key] ?? "";
+      }
+      return next;
+    });
+  }, [selectedSchema]);
 
   function addAudit(event: Omit<AuditEvent, "id" | "timestamp">) {
     setAuditEvents((current) => [createAuditEvent(event), ...current]);
@@ -254,6 +271,31 @@ export default function App() {
     void executeReplay(schema, params);
   }
 
+  function handleRunSelectedTool() {
+    if (!selectedSchema) {
+      return;
+    }
+
+    const params = collectSchemaParams(selectedSchema, toolParams);
+    setReplayTrace([]);
+    setReplayResult(undefined);
+
+    if (requiresApproval(selectedSchema.risk)) {
+      setPendingApproval({ schema: selectedSchema, params });
+      addAudit({
+        type: "approval_requested",
+        toolName: selectedSchema.name,
+        params,
+        risk: selectedSchema.risk,
+        message: `Approval requested for ${selectedSchema.name}`,
+        llmCalls: 0,
+      });
+      return;
+    }
+
+    void executeReplay(selectedSchema, params);
+  }
+
   async function handleAllow() {
     if (!pendingApproval) {
       return;
@@ -300,17 +342,33 @@ export default function App() {
     });
 
     try {
-      const result = await replayTool(schema, params, (trace) => {
-        setReplayTrace((current) => [...current, trace]);
-        addAudit({
-          type: "replay_step",
-          toolName: schema.name,
-          params,
-          risk: schema.risk,
-          message: trace.message,
-          llmCalls: 0,
-        });
-      });
+      const result = isExtension
+        ? await replayActivePageTool(schema, params)
+        : await replayTool(schema, params, (trace) => {
+            setReplayTrace((current) => [...current, trace]);
+            addAudit({
+              type: "replay_step",
+              toolName: schema.name,
+              params,
+              risk: schema.risk,
+              message: trace.message,
+              llmCalls: 0,
+            });
+          });
+
+      if (isExtension) {
+        setReplayTrace(result.trace);
+        for (const trace of result.trace) {
+          addAudit({
+            type: "replay_step",
+            toolName: schema.name,
+            params,
+            risk: schema.risk,
+            message: trace.message,
+            llmCalls: 0,
+          });
+        }
+      }
 
       setReplayResult(result);
       addAudit({
@@ -374,15 +432,38 @@ export default function App() {
           replayTrace={replayTrace}
           schemas={schemas}
           selectedSchema={selectedSchema}
+          toolParams={toolParams}
           onAllow={handleAllow}
           onCommandChange={setCommand}
           onDeny={handleDeny}
           onLearn={handleLearn}
           onRun={handleRun}
+          onRunSelectedTool={handleRunSelectedTool}
           onSelectSchema={(schema) => setSelectedToolName(schema.name)}
+          onToolParamChange={(name, value) => setToolParams((current) => ({ ...current, [name]: value }))}
           onUsePreset={() => setCommand(presetCommand)}
         />
       </div>
     </main>
   );
+}
+
+function collectSchemaParams(schema: ToolSchema, values: Record<string, string>): Record<string, unknown> {
+  return (schema.inputSchema.required ?? []).reduce<Record<string, unknown>>((params, key) => {
+    params[key] = coerceParamValue(schema.inputSchema.properties[key], values[key] ?? "");
+    return params;
+  }, {});
+}
+
+function coerceParamValue(property: unknown, value: string): unknown {
+  if (
+    property &&
+    typeof property === "object" &&
+    "type" in property &&
+    property.type === "number"
+  ) {
+    return Number(value);
+  }
+
+  return value;
 }

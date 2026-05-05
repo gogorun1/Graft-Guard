@@ -20,12 +20,15 @@ type Props = {
   replayTrace: ReplayTrace[];
   schemas: ToolSchema[];
   selectedSchema?: ToolSchema;
+  toolParams: Record<string, string>;
   onAllow: () => void;
   onCommandChange: (value: string) => void;
   onDeny: () => void;
   onLearn: () => void;
   onRun: () => void;
+  onRunSelectedTool: () => void;
   onSelectSchema: (schema: ToolSchema) => void;
+  onToolParamChange: (name: string, value: string) => void;
   onUsePreset: () => void;
 };
 
@@ -39,12 +42,15 @@ export function GraftPanel({
   replayTrace,
   schemas,
   selectedSchema,
+  toolParams,
   onAllow,
   onCommandChange,
   onDeny,
   onLearn,
   onRun,
+  onRunSelectedTool,
   onSelectSchema,
+  onToolParamChange,
   onUsePreset,
 }: Props) {
   return (
@@ -95,6 +101,38 @@ export function GraftPanel({
         </div>
         <SchemaViewer schema={selectedSchema} />
       </section>
+
+      {selectedSchema && (
+        <section className="panel-section">
+          <div className="section-heading">
+            <h3>Tool inputs</h3>
+            <span>{selectedSchema.risk}</span>
+          </div>
+          <div className="tool-inputs">
+            {(selectedSchema.inputSchema.required ?? []).map((name) => (
+              <label key={name}>
+                {name}
+                <input
+                  type={inputTypeForProperty(selectedSchema.inputSchema.properties[name])}
+                  value={toolParams[name] ?? ""}
+                  onChange={(event) => onToolParamChange(name, event.target.value)}
+                />
+              </label>
+            ))}
+            {(selectedSchema.inputSchema.required ?? []).length === 0 && (
+              <div className="empty-state">This tool does not require parameters.</div>
+            )}
+          </div>
+          <button
+            type="button"
+            className="primary-button full-width"
+            onClick={onRunSelectedTool}
+            disabled={isRunning || schemas.length === 0}
+          >
+            {isRunning ? "Running..." : "Run saved tool"}
+          </button>
+        </section>
+      )}
 
       <section className="panel-section">
         <div className="section-heading">
@@ -147,4 +185,17 @@ export function GraftPanel({
       </section>
     </aside>
   );
+}
+
+function inputTypeForProperty(property: unknown): string {
+  if (
+    property &&
+    typeof property === "object" &&
+    "type" in property &&
+    property.type === "number"
+  ) {
+    return "number";
+  }
+
+  return "text";
 }

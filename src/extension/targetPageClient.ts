@@ -1,4 +1,5 @@
 import type { BackgroundMessage, CapturedStep, PageDomSummary } from "./pageSummary";
+import type { ReplayResult, ToolSchema } from "../graft/schemaTypes";
 
 type CollectResponse =
   | { ok: true; summary: PageDomSummary }
@@ -6,6 +7,10 @@ type CollectResponse =
 
 type CaptureResponse =
   | { ok: true; steps: CapturedStep[] }
+  | { ok: false; error: string };
+
+type ReplayResponse =
+  | { ok: true; result: ReplayResult }
   | { ok: false; error: string };
 
 export function isExtensionRuntime(): boolean {
@@ -49,6 +54,26 @@ export async function stopActivePageCapture(): Promise<CapturedStep[]> {
   }
 
   return response.steps;
+}
+
+export async function replayActivePageTool(
+  schema: ToolSchema,
+  params: Record<string, unknown>,
+): Promise<ReplayResult> {
+  const tab = await getInspectableActiveTab();
+  const response = (await withInjectedContentScript(tab.id, () =>
+    chrome.tabs.sendMessage(tab.id, {
+      type: "GRAFT_GUARD_REPLAY_TOOL",
+      schema,
+      params,
+    }),
+  )) as ReplayResponse;
+
+  if (!response.ok) {
+    throw new Error(response.error);
+  }
+
+  return response.result;
 }
 
 async function getInspectableActiveTab(): Promise<{ id: number; url: string }> {

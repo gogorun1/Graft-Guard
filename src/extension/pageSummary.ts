@@ -1,3 +1,5 @@
+import type { ToolSchema } from "../graft/schemaTypes";
+
 export type PageInputSummary = {
   selector: string;
   label?: string;
@@ -63,6 +65,12 @@ export type StopCaptureMessage = {
   type: "GRAFT_GUARD_STOP_CAPTURE";
 };
 
+export type ReplayToolMessage = {
+  type: "GRAFT_GUARD_REPLAY_TOOL";
+  schema: ToolSchema;
+  params: Record<string, unknown>;
+};
+
 export type StartCaptureSessionMessage = {
   type: "GRAFT_GUARD_START_CAPTURE_SESSION";
   tabId: number;
@@ -82,7 +90,11 @@ export type CaptureStepMessage = {
   step: CapturedStep;
 };
 
-export type ExtensionMessage = CollectPageSummaryMessage | StartCaptureMessage | StopCaptureMessage;
+export type ExtensionMessage =
+  | CollectPageSummaryMessage
+  | StartCaptureMessage
+  | StopCaptureMessage
+  | ReplayToolMessage;
 
 export type BackgroundMessage =
   | StartCaptureSessionMessage

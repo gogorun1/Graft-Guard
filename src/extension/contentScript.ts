@@ -8,6 +8,7 @@ import type {
   PageInputSummary,
   PageTableSummary,
 } from "./pageSummary";
+import type { ReplayResult, ReplayStep, ReplayTrace } from "../graft/schemaTypes";
 
 let isCapturing = false;
 let capturedSteps: CapturedStep[] = [];
@@ -30,6 +31,13 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
   if (message.type === "GRAFT_GUARD_STOP_CAPTURE") {
     const steps = stopCapture();
     sendResponse({ ok: true, steps });
+    return true;
+  }
+
+  if (message.type === "GRAFT_GUARD_REPLAY_TOOL") {
+    void replayToolOnPage(message.schema.replayPlan, message.params)
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((error: unknown) => sendResponse({ ok: false, error: errorMessage(error) }));
     return true;
   }
 
@@ -129,6 +137,89 @@ function reportCapturedStep(step: CapturedStep) {
     type: "GRAFT_GUARD_CAPTURE_STEP",
     step,
   } satisfies BackgroundMessage);
+}
+
+async function replayToolOnPage(
+  replayPlan: ReplayStep[],
+  params: Record<string, unknown>,
+): Promise<ReplayResult> {
+  const trace: ReplayTrace[] = [];
+  let rows: Record<string, string | number>[] = [];
+
+  for (const step of replayPlan) {
+    if (step.type === "setValue") {
+      const element = queryReplayElement(step.selector);
+      setElementValue(element, params[step.valueFrom]);
+      trace.push({ step, message: `Set ${step.selector} from ${step.valueFrom}` });
+      await sleep(75);
+    }
+
+    if (step.type === "click") {
+      queryReplayElement<HTMLElement>(step.selector).click();
+      trace.push({ step, message: `Clicked ${step.selector}` });
+      await sleep(100);
+    }
+
+    if (step.type === "extractTable") {
+      rows = extractTable(step.selector);
+      trace.push({ step, message: `Extracted ${rows.length} rows from ${step.selector}` });
+      await sleep(50);
+    }
+  }
+
+  return { rows, trace, llmCalls: 0 };
+}
+
+function setElementValue(element: Element, value: unknown) {
+  if (!(element instanceof HTMLElement) || !isInputElement(element)) {
+    throw new Error(`Replay target is not an input: ${elementToSelectorLabel(element)}`);
+  }
+
+  if (element instanceof HTMLInputElement && (element.type === "checkbox" || element.type === "radio")) {
+    element.checked = value === true || value === "true" || value === "checked" || value === "on";
+  } else {
+    element.value = String(value ?? "");
+  }
+
+  element.dispatchEvent(new Event("input", { bubbles: true }));
+  element.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function queryReplayElement<T extends Element = Element>(selector: string): T {
+  const element = document.querySelector(selector);
+  if (!element) {
+    throw new Error(`Replay selector not found: ${selector}`);
+  }
+
+  return element as T;
+}
+
+function extractTable(selector: string): Record<string, string | number>[] {
+  const table = queryReplayElement<HTMLTableElement>(selector);
+  const headers = Array.from(table.querySelectorAll("thead th, tr:first-child th, tr:first-child td")).map((cell) =>
+    normalizeKey(cell.textContent ?? ""),
+  );
+
+  return Array.from(table.querySelectorAll("tbody tr")).map((row) => {
+    const values = Array.from(row.querySelectorAll("td"));
+    return headers.reduce<Record<string, string | number>>((record, key, index) => {
+      const value = values[index]?.textContent?.trim() ?? "";
+      record[key] = key === "amount" ? Number(value.replace(/[^\d.]/g, "")) : value;
+      return record;
+    }, {});
+  });
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function normalizeKey(label: string): string {
+  return label.trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+function elementToSelectorLabel(element: Element): string {
+  return element.id ? `#${element.id}` : element.tagName.toLowerCase();
 }
 
 function collectPageSummary(): PageDomSummary {
@@ -347,4 +438,8 @@ function cssEscape(value: string): string {
   }
 
   return value.replace(/["\\#.:,[\]>+~*']/g, "\\$&");
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
