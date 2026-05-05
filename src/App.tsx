@@ -476,6 +476,7 @@ export default function App() {
         <GraftPanel
           auditEvents={auditEvents}
           command={command}
+          isExtension={isExtension}
           isLearning={isLearning}
           isRunning={isRunning}
           pendingApproval={pendingApproval}

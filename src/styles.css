@@ -525,6 +525,41 @@ textarea {
   margin-top: 8px;
 }
 
+.fallback-row-single {
+  grid-template-columns: 1fr;
+}
+
+.fallback-hint {
+  margin: 0;
+  color: #566879;
+  font-size: 12px;
+}
+
+.show-once-card {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  border: 1px solid #d7dde3;
+  border-radius: 6px;
+  background: #fbfcfd;
+  padding: 10px;
+}
+
+.show-once-card div {
+  display: grid;
+  gap: 2px;
+}
+
+.show-once-card strong {
+  color: #1c2e3f;
+  font-size: 13px;
+}
+
+.show-once-card span {
+  color: #667585;
+  font-size: 12px;
+}
+
 .learned-page-chip {
   display: grid;
   gap: 2px;

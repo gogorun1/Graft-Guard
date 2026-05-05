@@ -43,6 +43,9 @@ export function ExtensionInspector({
   onStopCapture,
   onToggleAdvanced,
 }: Props) {
+  const hasWarnings = candidateWarnings.length > 0;
+  const showFallback = isCapturing || advancedOpen || hasWarnings || Boolean(error);
+
   return (
     <section className="extension-inspector" aria-label="Learn website">
       <div className="section-heading">
@@ -61,19 +64,10 @@ export function ExtensionInspector({
         onClick={onLearnWebsite}
         disabled={!isExtension || isLearningWebsite}
       >
-        {isLearningWebsite ? "Learning..." : "Learn website"}
+        {isLearningWebsite ? "Learning..." : "Learn this website"}
       </button>
 
-      <div className="fallback-row">
-        {!isCapturing ? (
-          <button type="button" className="secondary-button" onClick={onStartCapture} disabled={!isExtension}>
-            Show me once
-          </button>
-        ) : (
-          <button type="button" className="secondary-button active-capture" onClick={onStopCapture}>
-            Stop and suggest tool
-          </button>
-        )}
+      <div className="fallback-row fallback-row-single">
         <button type="button" className="secondary-button" onClick={onToggleAdvanced}>
           {advancedOpen ? "Hide advanced" : "Advanced"}
         </button>
@@ -108,9 +102,30 @@ export function ExtensionInspector({
               ))}
             </ul>
           )}
+          {hasWarnings && (
+            <p className="fallback-hint">If this suggestion looks unstable, show Graft Guard the workflow once.</p>
+          )}
           <button type="button" className="primary-button full-width" onClick={onSaveSchema}>
             Save tool
           </button>
+        </div>
+      )}
+
+      {showFallback && (
+        <div className="show-once-card">
+          <div>
+            <strong>{isCapturing ? "Recording your workflow..." : "Need a better suggestion?"}</strong>
+            <span>{isCapturing ? "Perform the workflow in the page, then click Done." : "Use a short demonstration as fallback."}</span>
+          </div>
+          {!isCapturing ? (
+            <button type="button" className="secondary-button" onClick={onStartCapture} disabled={!isExtension}>
+              Show me once
+            </button>
+          ) : (
+            <button type="button" className="secondary-button active-capture" onClick={onStopCapture}>
+              Done
+            </button>
+          )}
         </div>
       )}
 

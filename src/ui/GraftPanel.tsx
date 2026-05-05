@@ -13,6 +13,7 @@ type PendingApproval = {
 type Props = {
   auditEvents: AuditEvent[];
   command: string;
+  isExtension: boolean;
   isLearning: boolean;
   isRunning: boolean;
   pendingApproval?: PendingApproval;
@@ -35,6 +36,7 @@ type Props = {
 export function GraftPanel({
   auditEvents,
   command,
+  isExtension,
   isLearning,
   isRunning,
   pendingApproval,
@@ -63,15 +65,17 @@ export function GraftPanel({
         <span className="mode-badge">local replay</span>
       </header>
 
-      <section className="panel-section">
-        <div className="section-heading">
-          <h3>Learn</h3>
-          <span>{schemas.length > 0 ? "cached locally" : "not learned"}</span>
-        </div>
-        <button type="button" className="primary-button full-width" onClick={onLearn} disabled={isLearning}>
-          {isLearning ? "Learning..." : "Learn this app"}
-        </button>
-      </section>
+      {!isExtension && (
+        <section className="panel-section">
+          <div className="section-heading">
+            <h3>Learn</h3>
+            <span>{schemas.length > 0 ? "cached locally" : "not learned"}</span>
+          </div>
+          <button type="button" className="primary-button full-width" onClick={onLearn} disabled={isLearning}>
+            {isLearning ? "Learning..." : "Learn this app"}
+          </button>
+        </section>
+      )}
 
       <section className="panel-section">
         <div className="section-heading">
@@ -90,7 +94,11 @@ export function GraftPanel({
               <small>{schema.risk}</small>
             </button>
           ))}
-          {schemas.length === 0 && <div className="empty-state">Click learn to compile tools.</div>}
+          {schemas.length === 0 && (
+            <div className="empty-state">
+              {isExtension ? "Learn this website to create a saved tool." : "Click learn to compile tools."}
+            </div>
+          )}
         </div>
       </section>
 
@@ -142,21 +150,23 @@ export function GraftPanel({
         </section>
       )}
 
-      <section className="panel-section">
-        <div className="section-heading">
-          <h3>Command</h3>
-          <span>deterministic parser</span>
-        </div>
-        <textarea value={command} onChange={(event) => onCommandChange(event.target.value)} />
-        <div className="button-row">
-          <button type="button" className="secondary-button" onClick={onUsePreset}>
-            Preset
-          </button>
-          <button type="button" className="primary-button" onClick={onRun} disabled={isRunning || schemas.length === 0}>
-            {isRunning ? "Running..." : "Run tool"}
-          </button>
-        </div>
-      </section>
+      {!isExtension && (
+        <section className="panel-section">
+          <div className="section-heading">
+            <h3>Command</h3>
+            <span>deterministic parser</span>
+          </div>
+          <textarea value={command} onChange={(event) => onCommandChange(event.target.value)} />
+          <div className="button-row">
+            <button type="button" className="secondary-button" onClick={onUsePreset}>
+              Preset
+            </button>
+            <button type="button" className="primary-button" onClick={onRun} disabled={isRunning || schemas.length === 0}>
+              {isRunning ? "Running..." : "Run tool"}
+            </button>
+          </div>
+        </section>
+      )}
 
       {pendingApproval && (
         <ApprovalCard schema={pendingApproval.schema} onAllow={onAllow} onDeny={onDeny} />
