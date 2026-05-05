@@ -36,7 +36,10 @@ declare const chrome: {
     open(options: { windowId: number }): Promise<void>;
   };
   tabs: {
-    query(queryInfo: { active: boolean; currentWindow: boolean }): Promise<Array<{ id?: number }>>;
+    query(queryInfo: { active: boolean; currentWindow: boolean }): Promise<Array<{ id?: number; url?: string }>>;
     sendMessage(tabId: number, message: unknown): Promise<unknown>;
+  };
+  scripting: {
+    executeScript(options: { target: { tabId: number }; files: string[] }): Promise<unknown[]>;
   };
 };

@@ -3,7 +3,7 @@
   "name": "Graft Guard",
   "version": "0.1.0",
   "description": "Compile stable web workflows into typed, cached, guarded tools.",
-  "permissions": ["activeTab", "sidePanel", "tabs", "storage"],
+  "permissions": ["activeTab", "sidePanel", "scripting", "tabs", "storage"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_title": "Open Graft Guard"
