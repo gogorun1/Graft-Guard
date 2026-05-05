@@ -619,6 +619,44 @@ textarea {
   white-space: nowrap;
 }
 
+.candidate-schema {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  border: 1px solid #b8c7d4;
+  border-radius: 6px;
+  background: #eef7fb;
+  padding: 10px;
+}
+
+.candidate-schema .section-heading {
+  margin-bottom: 0;
+}
+
+.candidate-schema code {
+  display: block;
+  overflow-x: auto;
+  border: 1px solid #d6e2e8;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #183247;
+  padding: 8px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+}
+
+.warning-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.warning-list li {
+  color: #8a5d00;
+  font-size: 12px;
+}
+
 .empty-state {
   border: 1px dashed #c9d2db;
   border-radius: 6px;

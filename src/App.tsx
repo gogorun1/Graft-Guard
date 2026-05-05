@@ -8,6 +8,12 @@ import {
 } from "./extension/targetPageClient";
 import type { CapturedStep, PageDomSummary } from "./extension/pageSummary";
 import { createAuditEvent, type AuditEvent } from "./graft/auditLog";
+import {
+  compileCapturedWorkflow,
+  loadPageSchemas,
+  savePageSchema,
+  type CandidateTool,
+} from "./graft/capturedWorkflowCompiler";
 import { activeParserLabel, parseNaturalLanguageCommand } from "./graft/commandParser";
 import { compileApp, loadCachedSchemas } from "./graft/schemaCompiler";
 import { replayTool } from "./graft/replayEngine";
@@ -36,6 +42,7 @@ export default function App() {
   const [isInspecting, setIsInspecting] = useState(false);
   const [pageSummary, setPageSummary] = useState<PageDomSummary>();
   const [capturedSteps, setCapturedSteps] = useState<CapturedStep[]>([]);
+  const [candidateTool, setCandidateTool] = useState<CandidateTool>();
   const [isCapturing, setIsCapturing] = useState(false);
   const [inspectionError, setInspectionError] = useState<string>();
   const isExtension = isExtensionRuntime();
@@ -99,6 +106,9 @@ export default function App() {
     try {
       const summary = await collectActivePageSummary();
       setPageSummary(summary);
+      const pageSchemas = loadPageSchemas(summary);
+      setSchemas(pageSchemas);
+      setSelectedToolName(pageSchemas[0]?.name ?? "queryOrders");
       addAudit({
         type: "learned_tool",
         message: `Inspected ${summary.inputs.length} inputs, ${summary.buttons.length} buttons, ${summary.tables.length} tables on ${summary.origin}`,
@@ -120,6 +130,7 @@ export default function App() {
   async function handleStartCapture() {
     setInspectionError(undefined);
     setCapturedSteps([]);
+    setCandidateTool(undefined);
 
     try {
       await startActivePageCapture();
@@ -146,6 +157,7 @@ export default function App() {
     try {
       const steps = await stopActivePageCapture();
       setCapturedSteps(steps);
+      setCandidateTool(undefined);
       setIsCapturing(false);
       addAudit({
         type: "replay_completed",
@@ -162,6 +174,46 @@ export default function App() {
         llmCalls: 0,
       });
     }
+  }
+
+  function handleGenerateSchema() {
+    try {
+      const candidate = compileCapturedWorkflow(capturedSteps, pageSummary);
+      setCandidateTool(candidate);
+      setSelectedToolName(candidate.schema.name);
+      addAudit({
+        type: "learned_tool",
+        toolName: candidate.schema.name,
+        risk: candidate.schema.risk,
+        message: `Generated candidate schema ${candidate.schema.name}`,
+        llmCalls: 0,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not generate schema";
+      setInspectionError(message);
+      addAudit({
+        type: "replay_failed",
+        message,
+        llmCalls: 0,
+      });
+    }
+  }
+
+  function handleSaveGeneratedSchema() {
+    if (!candidateTool || !pageSummary) {
+      return;
+    }
+
+    const saved = savePageSchema(pageSummary, candidateTool.schema);
+    setSchemas(saved);
+    setSelectedToolName(candidateTool.schema.name);
+    addAudit({
+      type: "learned_tool",
+      toolName: candidateTool.schema.name,
+      risk: candidateTool.schema.risk,
+      message: `Saved ${candidateTool.schema.name} for ${pageSummary.origin}`,
+      llmCalls: 0,
+    });
   }
 
   async function handleRun() {
@@ -298,12 +350,16 @@ export default function App() {
         {isExtension && (
           <ExtensionInspector
             capturedSteps={capturedSteps}
+            candidateSchema={candidateTool?.schema}
+            candidateWarnings={candidateTool?.warnings ?? []}
             error={inspectionError}
             isCapturing={isCapturing}
             isExtension={isExtension}
             isInspecting={isInspecting}
             summary={pageSummary}
+            onGenerateSchema={handleGenerateSchema}
             onInspect={handleInspectActivePage}
+            onSaveSchema={handleSaveGeneratedSchema}
             onStartCapture={handleStartCapture}
             onStopCapture={handleStopCapture}
           />

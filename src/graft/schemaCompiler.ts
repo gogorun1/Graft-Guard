@@ -74,5 +74,25 @@ export function schemaSignature(schema: ToolSchema): string {
     return "queryOrders(startDate: Date, endDate: Date, minAmount: Number): Order[]";
   }
 
-  return "exportCsv(): CsvFile";
+  if (schema.name === "exportCsv") {
+    return "exportCsv(): CsvFile";
+  }
+
+  const required = schema.inputSchema.required ?? [];
+  const params = required.map((name) => `${name}: ${typeLabel(schema.inputSchema.properties[name])}`).join(", ");
+  const result = schema.risk === "read" ? "Record[]" : "ActionResult";
+  return `${schema.name}(${params}): ${result}`;
+}
+
+function typeLabel(property: unknown): string {
+  if (
+    property &&
+    typeof property === "object" &&
+    "type" in property &&
+    typeof property.type === "string"
+  ) {
+    return property.type === "number" ? "Number" : "String";
+  }
+
+  return "unknown";
 }

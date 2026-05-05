@@ -1,25 +1,35 @@
 import type { CapturedStep, PageDomSummary } from "../extension/pageSummary";
+import { schemaSignature } from "../graft/schemaCompiler";
+import type { ToolSchema } from "../graft/schemaTypes";
 
 type Props = {
   capturedSteps: CapturedStep[];
+  candidateSchema?: ToolSchema;
+  candidateWarnings: string[];
   error?: string;
   isCapturing: boolean;
   isExtension: boolean;
   isInspecting: boolean;
   summary?: PageDomSummary;
+  onGenerateSchema: () => void;
   onInspect: () => void;
+  onSaveSchema: () => void;
   onStartCapture: () => void;
   onStopCapture: () => void;
 };
 
 export function ExtensionInspector({
   capturedSteps,
+  candidateSchema,
+  candidateWarnings,
   error,
   isCapturing,
   isExtension,
   isInspecting,
   summary,
+  onGenerateSchema,
   onInspect,
+  onSaveSchema,
   onStartCapture,
   onStopCapture,
 }: Props) {
@@ -112,6 +122,29 @@ export function ExtensionInspector({
               </li>
             ))}
           </ol>
+          <button type="button" className="primary-button full-width" onClick={onGenerateSchema}>
+            Generate schema
+          </button>
+        </div>
+      )}
+
+      {candidateSchema && (
+        <div className="candidate-schema">
+          <div className="section-heading">
+            <h3>Candidate schema</h3>
+            <span>{candidateSchema.risk}</span>
+          </div>
+          <code>{schemaSignature(candidateSchema)}</code>
+          {candidateWarnings.length > 0 && (
+            <ul className="warning-list">
+              {candidateWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          )}
+          <button type="button" className="primary-button full-width" onClick={onSaveSchema}>
+            Save tool
+          </button>
         </div>
       )}
     </section>
