@@ -14,7 +14,7 @@ export function compileWebsiteIntent(intent: string, page: PageDomSummary): Cand
 
   const replayPlan: ReplayStep[] = usableInputs.map((input) => {
     const name = uniqueName(inferParameterName(input), usedNames);
-    properties[name] = { type: inferParameterType(input) };
+    properties[name] = inferParameterSchema(input);
     required.push(name);
 
     if (looksDynamicSelector(input.selector)) {
@@ -125,16 +125,20 @@ function inferParameterName(input: PageInputSummary): string {
   return toCamelCase(source.replace(/^(find|search|enter|select|choose)\s+/i, ""));
 }
 
-function inferParameterType(input: PageInputSummary): "boolean" | "number" | "string" {
+function inferParameterSchema(input: PageInputSummary): Record<string, unknown> {
   if (input.type === "checkbox" || input.type === "radio") {
-    return "boolean";
+    return { type: "boolean" };
   }
 
   if (input.type === "number" || input.type === "range") {
-    return "number";
+    return { type: "number" };
   }
 
-  return "string";
+  if (input.type === "date") {
+    return { type: "string", format: "date" };
+  }
+
+  return { type: "string" };
 }
 
 function inferRisk(intent: string, button?: PageButtonSummary): RiskLevel {

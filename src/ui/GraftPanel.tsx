@@ -119,7 +119,7 @@ export function GraftPanel({
           <div className="tool-inputs">
             {(selectedSchema.inputSchema.required ?? []).map((name) => (
               <label key={name}>
-                {name}
+                {labelForProperty(name, selectedSchema.inputSchema.properties[name])}
                 {isBooleanProperty(selectedSchema.inputSchema.properties[name]) ? (
                   <input
                     type="checkbox"
@@ -129,6 +129,10 @@ export function GraftPanel({
                 ) : (
                   <input
                     type={inputTypeForProperty(selectedSchema.inputSchema.properties[name])}
+                    min={numberAttribute(selectedSchema.inputSchema.properties[name], "minimum")}
+                    max={numberAttribute(selectedSchema.inputSchema.properties[name], "maximum")}
+                    step={numberAttribute(selectedSchema.inputSchema.properties[name], "step")}
+                    placeholder={placeholderForProperty(selectedSchema.inputSchema.properties[name])}
                     value={toolParams[name] ?? ""}
                     onChange={(event) => onToolParamChange(name, event.target.value)}
                   />
@@ -206,6 +210,10 @@ export function GraftPanel({
 }
 
 function inputTypeForProperty(property: unknown): string {
+  if (hasPropertyValue(property, "format", "date")) {
+    return "date";
+  }
+
   if (
     property &&
     typeof property === "object" &&
@@ -225,6 +233,49 @@ function inputTypeForProperty(property: unknown): string {
   }
 
   return "text";
+}
+
+function labelForProperty(name: string, property: unknown): string {
+  if (property && typeof property === "object" && "title" in property && typeof property.title === "string") {
+    return property.title;
+  }
+
+  return name.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (char) => char.toUpperCase());
+}
+
+function placeholderForProperty(property: unknown): string | undefined {
+  if (
+    property &&
+    typeof property === "object" &&
+    "placeholder" in property &&
+    typeof property.placeholder === "string"
+  ) {
+    return property.placeholder;
+  }
+
+  if (hasPropertyValue(property, "format", "date")) {
+    return "YYYY-MM-DD";
+  }
+
+  return undefined;
+}
+
+function numberAttribute(property: unknown, key: "minimum" | "maximum" | "step"): string | undefined {
+  if (property && typeof property === "object" && key in property) {
+    const value = (property as Record<string, unknown>)[key];
+    return typeof value === "number" ? String(value) : undefined;
+  }
+
+  return undefined;
+}
+
+function hasPropertyValue(property: unknown, key: string, expected: string): boolean {
+  return Boolean(
+    property &&
+      typeof property === "object" &&
+      key in property &&
+      (property as Record<string, unknown>)[key] === expected,
+  );
 }
 
 function isBooleanProperty(property: unknown): boolean {

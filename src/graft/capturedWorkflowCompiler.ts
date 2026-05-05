@@ -19,7 +19,7 @@ export function compileCapturedWorkflow(steps: CapturedStep[], page?: PageDomSum
   const toolName = inferToolName(clickLabels, page);
   const risk = inferRisk(steps);
   const parameterNames = new Map<string, string>();
-  const parameterTypes = new Map<string, "boolean" | "number" | "string">();
+  const parameterSchemas = new Map<string, Record<string, unknown>>();
   const usedNames = new Set<string>();
 
   const replayPlan: ReplayStep[] = steps.map((step): ReplayStep => {
@@ -33,7 +33,7 @@ export function compileCapturedWorkflow(steps: CapturedStep[], page?: PageDomSum
 
     const name = uniqueName(inferParameterName(step), usedNames);
     parameterNames.set(step.selector, name);
-    parameterTypes.set(name, inferParameterType(step));
+    parameterSchemas.set(name, inferParameterSchema(step));
 
     if (looksDynamicSelector(step.selector)) {
       warnings.push(`Selector may be dynamic: ${step.selector}`);
@@ -47,7 +47,7 @@ export function compileCapturedWorkflow(steps: CapturedStep[], page?: PageDomSum
   }
 
   const properties = Array.from(parameterNames.values()).reduce<Record<string, unknown>>((record, name) => {
-    record[name] = { type: parameterTypes.get(name) ?? "string" };
+    record[name] = parameterSchemas.get(name) ?? { type: "string" };
     return record;
   }, {});
 
@@ -135,16 +135,20 @@ function inferParameterName(step: Extract<CapturedStep, { type: "setValue" }>): 
   return toCamelCase(source.replace(/^(find|search|enter|select|choose)\s+/i, ""));
 }
 
-function inferParameterType(step: Extract<CapturedStep, { type: "setValue" }>): "boolean" | "number" | "string" {
+function inferParameterSchema(step: Extract<CapturedStep, { type: "setValue" }>): Record<string, unknown> {
   if (step.inputType === "checkbox" || step.inputType === "radio") {
-    return "boolean";
+    return { type: "boolean" };
   }
 
   if (step.inputType === "number" || step.inputType === "range") {
-    return "number";
+    return { type: "number" };
   }
 
-  return "string";
+  if (step.inputType === "date") {
+    return { type: "string", format: "date" };
+  }
+
+  return { type: "string" };
 }
 
 function inferRisk(steps: CapturedStep[]): RiskLevel {

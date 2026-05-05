@@ -24,10 +24,10 @@ export async function replayTool(
     if (step.type === "setValue") {
       const target = queryElement<HTMLInputElement>(step.selector);
       const rawValue = params[step.valueFrom];
-      target.value = String(rawValue ?? "");
+      target.value = normalizeInputValue(target, rawValue);
       target.dispatchEvent(new Event("input", { bubbles: true }));
       target.dispatchEvent(new Event("change", { bubbles: true }));
-      record(step, `Set ${step.selector} from ${step.valueFrom}`);
+      record(step, `Set ${step.selector} to ${target.value} from ${step.valueFrom}`);
       await sleep(100);
     }
 
@@ -64,6 +64,39 @@ function queryElement<T extends Element>(selector: string): T {
   }
 
   return element as T;
+}
+
+function normalizeInputValue(target: HTMLInputElement, value: unknown): string {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  if (target.type === "date") {
+    return normalizeDateValue(value);
+  }
+
+  if (target.type === "number" || target.type === "range") {
+    const numberValue = typeof value === "number" ? value : Number(String(value).replace(/[^\d.-]/g, ""));
+    return Number.isFinite(numberValue) ? String(numberValue) : "";
+  }
+
+  return String(value);
+}
+
+function normalizeDateValue(value: unknown): string {
+  if (typeof value === "string") {
+    const isoMatch = value.match(/^\d{4}-\d{2}-\d{2}/);
+    if (isoMatch) {
+      return isoMatch[0];
+    }
+  }
+
+  const date = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toISOString().slice(0, 10);
 }
 
 function extractTable(selector: string): Record<string, string | number>[] {

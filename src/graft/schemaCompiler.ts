@@ -10,9 +10,25 @@ const queryOrdersSchema: ToolSchema = {
   inputSchema: {
     type: "object",
     properties: {
-      startDate: { type: "string", format: "date" },
-      endDate: { type: "string", format: "date" },
-      minAmount: { type: "number" },
+      startDate: {
+        type: "string",
+        format: "date",
+        title: "Start date",
+        default: "2026-04-01",
+      },
+      endDate: {
+        type: "string",
+        format: "date",
+        title: "End date",
+        default: "2026-04-30",
+      },
+      minAmount: {
+        type: "number",
+        title: "Minimum amount",
+        default: 1000,
+        minimum: 0,
+        step: 1,
+      },
     },
     required: ["startDate", "endDate", "minAmount"],
   },

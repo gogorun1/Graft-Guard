@@ -177,12 +177,47 @@ function setElementValue(element: Element, value: unknown) {
 
   if (element instanceof HTMLInputElement && (element.type === "checkbox" || element.type === "radio")) {
     element.checked = value === true || value === "true" || value === "checked" || value === "on";
+  } else if (element instanceof HTMLInputElement) {
+    element.value = normalizeInputValue(element, value);
   } else {
     element.value = String(value ?? "");
   }
 
   element.dispatchEvent(new Event("input", { bubbles: true }));
   element.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function normalizeInputValue(target: HTMLInputElement, value: unknown): string {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  if (target.type === "date") {
+    return normalizeDateValue(value);
+  }
+
+  if (target.type === "number" || target.type === "range") {
+    const numberValue = typeof value === "number" ? value : Number(String(value).replace(/[^\d.-]/g, ""));
+    return Number.isFinite(numberValue) ? String(numberValue) : "";
+  }
+
+  return String(value);
+}
+
+function normalizeDateValue(value: unknown): string {
+  if (typeof value === "string") {
+    const isoMatch = value.match(/^\d{4}-\d{2}-\d{2}/);
+    if (isoMatch) {
+      return isoMatch[0];
+    }
+  }
+
+  const date = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toISOString().slice(0, 10);
 }
 
 function queryReplayElement<T extends Element = Element>(selector: string): T {

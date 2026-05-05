@@ -398,6 +398,18 @@ textarea {
   padding: 8px 10px;
 }
 
+.tool-inputs input[type="date"],
+.tool-inputs input[type="number"] {
+  font-family: "SFMono-Regular", Consolas, monospace;
+}
+
+.tool-inputs input[type="checkbox"] {
+  justify-self: start;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+}
+
 .button-row {
   display: flex;
   justify-content: flex-end;

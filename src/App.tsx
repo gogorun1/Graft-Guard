@@ -67,7 +67,7 @@ export default function App() {
     setToolParams((current) => {
       const next = { ...current };
       for (const key of selectedSchema.inputSchema.required ?? []) {
-        next[key] = next[key] ?? "";
+        next[key] = next[key] ?? defaultParamValue(selectedSchema.inputSchema.properties[key]);
       }
       return next;
     });
@@ -281,40 +281,54 @@ export default function App() {
 
   async function handleRun() {
     setIsRunning(true);
-    const invocation = await parseNaturalLanguageCommand(command);
-    const schema = schemas.find((tool) => tool.name === invocation.toolName);
-    if (!schema) {
-      setIsRunning(false);
-      return;
-    }
+    try {
+      const invocation = await parseNaturalLanguageCommand(command);
+      const schema = schemas.find((tool) => tool.name === invocation.toolName);
+      if (!schema) {
+        addAudit({
+          type: "replay_failed",
+          message: `No learned tool matched ${invocation.toolName}`,
+          llmCalls: 0,
+        });
+        setIsRunning(false);
+        return;
+      }
 
-    const params = invocation.params;
-    setReplayTrace([]);
-    setReplayResult(undefined);
-    addAudit({
-      type: "replay_started",
-      toolName: schema.name,
-      params,
-      risk: schema.risk,
-      message: `Mapped command with ${activeParserLabel()}`,
-      llmCalls: activeParserLabel().includes("MiniMax") ? 1 : 0,
-    });
-
-    if (requiresApproval(schema.risk)) {
-      setPendingApproval({ schema, params });
-      setIsRunning(false);
+      const params = invocation.params;
+      setReplayTrace([]);
+      setReplayResult(undefined);
       addAudit({
-        type: "approval_requested",
+        type: "replay_started",
         toolName: schema.name,
         params,
         risk: schema.risk,
-        message: "Approval requested for queryOrders",
+        message: `Mapped command with ${activeParserLabel()}`,
+        llmCalls: activeParserLabel().includes("MiniMax") ? 1 : 0,
+      });
+
+      if (requiresApproval(schema.risk)) {
+        setPendingApproval({ schema, params });
+        setIsRunning(false);
+        addAudit({
+          type: "approval_requested",
+          toolName: schema.name,
+          params,
+          risk: schema.risk,
+          message: `Approval requested for ${schema.name}`,
+          llmCalls: 0,
+        });
+        return;
+      }
+
+      void executeReplay(schema, params);
+    } catch (error) {
+      addAudit({
+        type: "replay_failed",
+        message: error instanceof Error ? error.message : "Command parsing failed",
         llmCalls: 0,
       });
-      return;
+      setIsRunning(false);
     }
-
-    void executeReplay(schema, params);
   }
 
   function handleRunSelectedTool() {
@@ -502,7 +516,8 @@ export default function App() {
 
 function collectSchemaParams(schema: ToolSchema, values: Record<string, string>): Record<string, unknown> {
   return (schema.inputSchema.required ?? []).reduce<Record<string, unknown>>((params, key) => {
-    params[key] = coerceParamValue(schema.inputSchema.properties[key], values[key] ?? "");
+    const property = schema.inputSchema.properties[key];
+    params[key] = coerceParamValue(property, values[key] || defaultParamValue(property));
     return params;
   }, {});
 }
@@ -527,4 +542,21 @@ function coerceParamValue(property: unknown, value: string): unknown {
   }
 
   return value;
+}
+
+function defaultParamValue(property: unknown): string {
+  if (property && typeof property === "object" && "default" in property) {
+    return String(property.default ?? "");
+  }
+
+  if (
+    property &&
+    typeof property === "object" &&
+    "type" in property &&
+    property.type === "number"
+  ) {
+    return "0";
+  }
+
+  return "";
 }
