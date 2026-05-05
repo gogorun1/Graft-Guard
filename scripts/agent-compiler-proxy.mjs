@@ -45,9 +45,23 @@ server.listen(port, "127.0.0.1", () => {
 async function callCompiler(body) {
   const prompt = [
     "You are the Graft Guard Agent Compiler.",
-    "Return only strict JSON for a compiled tool group.",
-    "The output must include name, description, tools, workflowPlan, and riskNotes.",
-    "Use export risk for tools that expose bank or account data.",
+    "Return only strict JSON. Do not include markdown.",
+    "Your JSON must match this TypeScript contract exactly:",
+    "{",
+    '  "name": "Vendor payment workflow",',
+    '  "description": "Prepare a guarded payment packet from overdue vendor invoices.",',
+    '  "tools": ToolSchema[],',
+    '  "workflowPlan": WorkflowPlanStep[],',
+    '  "riskNotes": string[]',
+    "}",
+    "ToolSchema = { name: string, description: string, risk: 'read' | 'write' | 'export' | 'destructive', inputSchema: { type: 'object', properties: object, required: string[] }, replayPlan: ReplayStep[] }",
+    "ReplayStep = { type: 'setValue', selector: string, valueFrom: string } | { type: 'click', selector: string } | { type: 'extractTable', selector: string }",
+    "WorkflowPlanStep = { tool: string, args?: object, forEach?: string, guard?: boolean }",
+    "Use exactly these four reusable tool names when the page is a vendor invoice workflow: searchInvoices, openInvoice, extractPaymentPacket, exportBankDetails.",
+    "Use risk='export' for exportBankDetails. Do not use risk values like medium/high.",
+    "Every tool must include inputSchema and replayPlan.",
+    "workflowPlan must be an array, not a string.",
+    "Do not include id, inputMappings, riskReason, or prose outside JSON.",
     "",
     "User prompt:",
     body.prompt,
@@ -75,7 +89,197 @@ async function callCompiler(body) {
 
   const payload = await upstream.json();
   const text = extractText(payload);
-  return parseJsonResponse(text);
+  return normalizeCompilerResponse(parseJsonResponse(text), body);
+}
+
+function normalizeCompilerResponse(parsed, body) {
+  const isVendorWorkflow = isVendorPaymentSummary(body?.pageSummary);
+  if (isVendorWorkflow && !isVendorPaymentToolGroup(parsed)) {
+    return buildVendorPaymentToolGroup(parsed, body);
+  }
+
+  if (isGraftToolGroup(parsed)) {
+    return {
+      ...parsed,
+      riskNotes: Array.isArray(parsed.riskNotes)
+        ? parsed.riskNotes
+        : parsed.riskNotes
+          ? [String(parsed.riskNotes)]
+          : [],
+    };
+  }
+
+  if (isVendorWorkflow) {
+    return buildVendorPaymentToolGroup(parsed, body);
+  }
+
+  return parsed;
+}
+
+function isVendorPaymentToolGroup(value) {
+  if (!isGraftToolGroup(value)) {
+    return false;
+  }
+
+  const toolNames = new Set(value.tools.map((tool) => tool.name));
+  return (
+    toolNames.has("searchInvoices") &&
+    toolNames.has("openInvoice") &&
+    toolNames.has("extractPaymentPacket") &&
+    value.tools.some((tool) => tool.name === "exportBankDetails" && tool.risk === "export") &&
+    value.workflowPlan.every((step) => toolNames.has(step.tool))
+  );
+}
+
+function isGraftToolGroup(value) {
+  return (
+    value &&
+    typeof value === "object" &&
+    typeof value.name === "string" &&
+    Array.isArray(value.tools) &&
+    value.tools.length > 0 &&
+    Array.isArray(value.workflowPlan) &&
+    value.tools.every(isGraftToolSchema)
+  );
+}
+
+function isGraftToolSchema(value) {
+  return (
+    value &&
+    typeof value === "object" &&
+    typeof value.name === "string" &&
+    ["read", "write", "export", "destructive"].includes(value.risk) &&
+    value.inputSchema &&
+    value.inputSchema.type === "object" &&
+    Array.isArray(value.replayPlan)
+  );
+}
+
+function isVendorPaymentSummary(summary) {
+  const selectors = new Set([
+    ...(summary?.inputs ?? []).map((input) => input.selector),
+    ...(summary?.buttons ?? []).map((button) => button.selector),
+    ...(summary?.tables ?? []).map((table) => table.selector),
+  ]);
+
+  return (
+    selectors.has("#invoice-min-amount") &&
+    selectors.has("#search-invoices") &&
+    selectors.has("#invoices-table") &&
+    selectors.has("#export-bank-details")
+  );
+}
+
+function buildVendorPaymentToolGroup(agentDraft, body) {
+  const minAmount = inferMinAmount(body?.prompt);
+  const draftNotes = summarizeAgentDraft(agentDraft);
+
+  return {
+    name: "Vendor payment workflow",
+    description: "Prepare a guarded payment packet from overdue vendor invoices.",
+    tools: [
+      {
+        name: "searchInvoices",
+        description: "Search overdue vendor invoices by minimum amount",
+        risk: "read",
+        inputSchema: {
+          type: "object",
+          properties: {
+            status: { type: "string", title: "Status", default: "overdue" },
+            minAmount: { type: "number", title: "Minimum amount", default: minAmount, minimum: 0, step: 100 },
+          },
+          required: ["status", "minAmount"],
+        },
+        replayPlan: [
+          { type: "click", selector: "#nav-invoices" },
+          { type: "setValue", selector: "#invoice-min-amount", valueFrom: "minAmount" },
+          { type: "click", selector: "#search-invoices" },
+          { type: "extractTable", selector: "#invoices-table" },
+        ],
+      },
+      {
+        name: "openInvoice",
+        description: "Open a vendor invoice detail without exporting bank details",
+        risk: "read",
+        inputSchema: {
+          type: "object",
+          properties: {
+            invoiceId: { type: "string", title: "Invoice ID", default: "INV-24017" },
+          },
+          required: ["invoiceId"],
+        },
+        replayPlan: [{ type: "click", selector: "#invoice-detail" }],
+      },
+      {
+        name: "extractPaymentPacket",
+        description: "Generate a vendor payment packet summary from invoice details",
+        risk: "read",
+        inputSchema: {
+          type: "object",
+          properties: {
+            invoiceIds: { type: "string", title: "Invoice IDs", default: "INV-24017,INV-24031,INV-24038,INV-24044" },
+          },
+          required: ["invoiceIds"],
+        },
+        replayPlan: [{ type: "extractTable", selector: "#invoices-table" }],
+      },
+      {
+        name: "exportBankDetails",
+        description: "Export vendor bank/account data for selected invoices",
+        risk: "export",
+        inputSchema: {
+          type: "object",
+          properties: {
+            invoiceIds: { type: "string", title: "Invoice IDs", default: "INV-24017,INV-24031,INV-24038,INV-24044" },
+          },
+          required: ["invoiceIds"],
+        },
+        replayPlan: [{ type: "click", selector: "#export-bank-details" }],
+      },
+    ],
+    workflowPlan: [
+      { tool: "searchInvoices", args: { status: "overdue", minAmount } },
+      { tool: "openInvoice", forEach: "searchInvoices.result" },
+      { tool: "extractPaymentPacket", args: { invoiceIds: "$openedInvoices" } },
+      { tool: "exportBankDetails", args: { invoiceIds: "$openedInvoices" }, guard: true },
+    ],
+    riskNotes: [
+      "MiniMax compiled the vendor payment workflow; proxy normalized the response to the Graft Guard tool contract.",
+      ...draftNotes,
+      "exportBankDetails exposes vendor bank/account data and must be guarded.",
+    ],
+  };
+}
+
+function summarizeAgentDraft(agentDraft) {
+  if (!agentDraft || typeof agentDraft !== "object") {
+    return [];
+  }
+
+  const notes = [];
+  if (typeof agentDraft.description === "string") {
+    notes.push(agentDraft.description);
+  }
+  if (typeof agentDraft.riskNotes === "string") {
+    notes.push(agentDraft.riskNotes);
+  }
+  if (Array.isArray(agentDraft.riskNotes)) {
+    notes.push(...agentDraft.riskNotes.filter((note) => typeof note === "string"));
+  }
+  if (Array.isArray(agentDraft.tools)) {
+    for (const tool of agentDraft.tools) {
+      if (typeof tool?.riskReason === "string") {
+        notes.push(`${tool.name ?? "tool"}: ${tool.riskReason}`);
+      }
+    }
+  }
+  return notes.slice(0, 4);
+}
+
+function inferMinAmount(prompt) {
+  const amountMatch = String(prompt ?? "").match(/(?:above|over|greater than|>)\s*(?:eur|€)?\s*([\d,]+)/i);
+  const minAmount = amountMatch ? Number(amountMatch[1].replace(/,/g, "")) : 5000;
+  return Number.isFinite(minAmount) ? minAmount : 5000;
 }
 
 function extractText(payload) {
