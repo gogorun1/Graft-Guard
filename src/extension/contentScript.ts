@@ -1,4 +1,5 @@
 import type {
+  BackgroundMessage,
   ExtensionMessage,
   CapturedStep,
   PageButtonSummary,
@@ -11,6 +12,8 @@ import type {
 let isCapturing = false;
 let capturedSteps: CapturedStep[] = [];
 let lastInputBySelector = new Map<string, CapturedStep>();
+
+void resumeCaptureIfSessionActive();
 
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
   if (message.type === "GRAFT_GUARD_COLLECT_PAGE") {
@@ -34,6 +37,7 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
 });
 
 function startCapture() {
+  stopCapture();
   capturedSteps = [];
   lastInputBySelector = new Map();
   isCapturing = true;
@@ -82,6 +86,7 @@ function handleCapturedInput(event: Event) {
   }
 
   lastInputBySelector.set(selector, step);
+  reportCapturedStep(step);
 }
 
 function handleCapturedClick(event: MouseEvent) {
@@ -94,12 +99,36 @@ function handleCapturedClick(event: MouseEvent) {
     return;
   }
 
-  capturedSteps.push({
+  const step: CapturedStep = {
     type: "click",
     selector: bestSelector(target),
     label: visibleText(target),
     tagName: target.tagName.toLowerCase(),
-  });
+  };
+
+  capturedSteps.push(step);
+  reportCapturedStep(step);
+}
+
+async function resumeCaptureIfSessionActive() {
+  try {
+    const response = (await chrome.runtime.sendMessage({
+      type: "GRAFT_GUARD_CAPTURE_STATUS",
+    } satisfies BackgroundMessage)) as { ok: true; active: boolean };
+
+    if (response.active) {
+      startCapture();
+    }
+  } catch {
+    // Content script can load before the background service worker is ready.
+  }
+}
+
+function reportCapturedStep(step: CapturedStep) {
+  void chrome.runtime.sendMessage({
+    type: "GRAFT_GUARD_CAPTURE_STEP",
+    step,
+  } satisfies BackgroundMessage);
 }
 
 function collectPageSummary(): PageDomSummary {

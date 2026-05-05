@@ -1,4 +1,4 @@
-import type { CapturedStep, PageDomSummary } from "./pageSummary";
+import type { BackgroundMessage, CapturedStep, PageDomSummary } from "./pageSummary";
 
 type CollectResponse =
   | { ok: true; summary: PageDomSummary }
@@ -20,6 +20,10 @@ export async function collectActivePageSummary(): Promise<PageDomSummary> {
 
 export async function startActivePageCapture(): Promise<void> {
   const tab = await getInspectableActiveTab();
+  await chrome.runtime.sendMessage({
+    type: "GRAFT_GUARD_START_CAPTURE_SESSION",
+    tabId: tab.id,
+  } satisfies BackgroundMessage);
   await withInjectedContentScript(tab.id, () =>
     chrome.tabs.sendMessage(tab.id, {
       type: "GRAFT_GUARD_START_CAPTURE",
@@ -29,11 +33,16 @@ export async function startActivePageCapture(): Promise<void> {
 
 export async function stopActivePageCapture(): Promise<CapturedStep[]> {
   const tab = await getInspectableActiveTab();
-  const response = (await withInjectedContentScript(tab.id, () =>
+  await withInjectedContentScript(tab.id, () =>
     chrome.tabs.sendMessage(tab.id, {
       type: "GRAFT_GUARD_STOP_CAPTURE",
     }),
-  )) as CaptureResponse;
+  ).catch(() => undefined);
+
+  const response = (await chrome.runtime.sendMessage({
+    type: "GRAFT_GUARD_STOP_CAPTURE_SESSION",
+    tabId: tab.id,
+  } satisfies BackgroundMessage)) as CaptureResponse;
 
   if (!response.ok) {
     throw new Error(response.error);

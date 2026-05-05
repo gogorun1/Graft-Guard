@@ -20,11 +20,12 @@ declare const chrome: {
       addListener(
         listener: (
           message: any,
-          sender: any,
+          sender: { tab?: { id?: number } },
           sendResponse: (response?: unknown) => void,
         ) => boolean | void,
       ): void;
     };
+    sendMessage(message: unknown): Promise<unknown>;
   };
   action: {
     onClicked: {

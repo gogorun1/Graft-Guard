@@ -63,4 +63,29 @@ export type StopCaptureMessage = {
   type: "GRAFT_GUARD_STOP_CAPTURE";
 };
 
+export type StartCaptureSessionMessage = {
+  type: "GRAFT_GUARD_START_CAPTURE_SESSION";
+  tabId: number;
+};
+
+export type StopCaptureSessionMessage = {
+  type: "GRAFT_GUARD_STOP_CAPTURE_SESSION";
+  tabId: number;
+};
+
+export type CaptureStatusMessage = {
+  type: "GRAFT_GUARD_CAPTURE_STATUS";
+};
+
+export type CaptureStepMessage = {
+  type: "GRAFT_GUARD_CAPTURE_STEP";
+  step: CapturedStep;
+};
+
 export type ExtensionMessage = CollectPageSummaryMessage | StartCaptureMessage | StopCaptureMessage;
+
+export type BackgroundMessage =
+  | StartCaptureSessionMessage
+  | StopCaptureSessionMessage
+  | CaptureStatusMessage
+  | CaptureStepMessage;
