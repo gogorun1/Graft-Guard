@@ -707,7 +707,6 @@ export default function App() {
       <div className="extension-panel-stack">
         <ExtensionInspector
           advancedOpen={advancedOpen}
-          agentMessages={agentMessages}
           capturedSteps={capturedSteps}
           candidateSchema={candidateTool?.schema}
           candidateWarnings={candidateTool?.warnings ?? []}
@@ -718,7 +717,6 @@ export default function App() {
           isExtension={isExtension}
           isInspecting={isInspecting}
           isLearningWebsite={isLearningWebsite}
-          isRunning={isRunning}
           summary={pageSummary}
           onIntentChange={(value) => {
             setWebsiteIntent(value);
@@ -727,8 +725,6 @@ export default function App() {
             }
           }}
           onInspect={handleInspectActivePage}
-          onLearnWebsite={handleLearnWebsite}
-          onRunWorkflow={handleRun}
           onSaveSchema={handleSaveGeneratedSchema}
           onStartCapture={handleStartCapture}
           onStopCapture={handleStopCapture}
@@ -762,8 +758,92 @@ export default function App() {
           onToolParamChange={(name, value) => setToolParams((current) => ({ ...current, [name]: value }))}
           onUsePreset={() => setCommand(presetCommand)}
         />
+        <WorkflowActionBar
+          hasCompiledWorkflow={Boolean(compiledToolGroup)}
+          isCompiling={isLearningWebsite}
+          isRunning={isRunning}
+          pendingApproval={pendingApproval}
+          toolCount={schemas.length}
+          onAllow={handleAllow}
+          onCompile={handleLearnWebsite}
+          onDeny={handleDeny}
+          onRun={handleRun}
+        />
       </div>
     </main>
+  );
+}
+
+function WorkflowActionBar({
+  hasCompiledWorkflow,
+  isCompiling,
+  isRunning,
+  pendingApproval,
+  toolCount,
+  onAllow,
+  onCompile,
+  onDeny,
+  onRun,
+}: {
+  hasCompiledWorkflow: boolean;
+  isCompiling: boolean;
+  isRunning: boolean;
+  pendingApproval?: PendingApproval;
+  toolCount: number;
+  onAllow: () => void;
+  onCompile: () => void;
+  onDeny: () => void;
+  onRun: () => void;
+}) {
+  if (pendingApproval) {
+    return (
+      <div className="workflow-action-bar workflow-action-bar-approval" aria-label="Workflow approval">
+        <div className="workflow-action-copy">
+          <strong>Approval needed</strong>
+          <span>{pendingApproval.schema.risk} · {pendingApproval.schema.name}</span>
+        </div>
+        <div className="workflow-action-buttons">
+          <button type="button" className="secondary-button" onClick={onDeny}>
+            Deny
+          </button>
+          <button type="button" className="primary-button" onClick={onAllow}>
+            Allow
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const primaryLabel = isCompiling
+    ? "Compiling..."
+    : isRunning
+      ? "Running..."
+      : hasCompiledWorkflow
+        ? "Run workflow"
+        : "Compile tools";
+
+  return (
+    <div className="workflow-action-bar" aria-label="Workflow actions">
+      <div className="workflow-action-copy">
+        <strong>{hasCompiledWorkflow ? "Ready" : "Compile required"}</strong>
+        <span>{hasCompiledWorkflow ? `${toolCount} reusable tools saved` : "Create tools once, then reuse them for runs"}</span>
+      </div>
+      <div className="workflow-action-buttons">
+        {hasCompiledWorkflow && !isCompiling && !isRunning && (
+          <button type="button" className="workflow-action-link" onClick={onCompile}>
+            Recompile
+          </button>
+        )}
+        <button
+          type="button"
+          className="primary-button"
+          onClick={hasCompiledWorkflow ? onRun : onCompile}
+          disabled={isCompiling || isRunning}
+        >
+          {primaryLabel}
+        </button>
+      </div>
+    </div>
   );
 }
 

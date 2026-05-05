@@ -1,13 +1,10 @@
-import { useState } from "react";
 import type { CapturedStep, PageDomSummary } from "../extension/pageSummary";
-import type { AgentMessage as AgentMessageModel } from "../graft/agentNarrator";
 import type { CompiledToolGroup } from "../graft/agentCompiler";
 import { schemaSignature } from "../graft/schemaCompiler";
 import type { ToolSchema } from "../graft/schemaTypes";
 
 type Props = {
   advancedOpen: boolean;
-  agentMessages: AgentMessageModel[];
   capturedSteps: CapturedStep[];
   candidateSchema?: ToolSchema;
   candidateWarnings: string[];
@@ -18,12 +15,9 @@ type Props = {
   isExtension: boolean;
   isInspecting: boolean;
   isLearningWebsite: boolean;
-  isRunning: boolean;
   summary?: PageDomSummary;
   onIntentChange: (value: string) => void;
   onInspect: () => void;
-  onLearnWebsite: () => void;
-  onRunWorkflow: () => void;
   onSaveSchema: () => void;
   onStartCapture: () => void;
   onStopCapture: () => void;
@@ -32,7 +26,6 @@ type Props = {
 
 export function ExtensionInspector({
   advancedOpen,
-  agentMessages,
   capturedSteps,
   candidateSchema,
   candidateWarnings,
@@ -43,12 +36,9 @@ export function ExtensionInspector({
   isExtension,
   isInspecting,
   isLearningWebsite,
-  isRunning,
   summary,
   onIntentChange,
   onInspect,
-  onLearnWebsite,
-  onRunWorkflow,
   onSaveSchema,
   onStartCapture,
   onStopCapture,
@@ -57,16 +47,21 @@ export function ExtensionInspector({
   const hasWarnings = candidateWarnings.length > 0;
   const showCustomTool = isCapturing || hasWarnings || Boolean(error);
   const compileStatus = isLearningWebsite ? "compiling" : candidateSchema || compiledToolGroup ? "compiled" : "idle";
-  const hasCompiledWorkflow = Boolean(compiledToolGroup);
-  const latestMessage = agentMessages[0]?.text;
+  const compileStatusLabel = isLearningWebsite
+    ? "Compiling"
+    : compiledToolGroup
+      ? "Ready"
+      : candidateSchema
+        ? "Recorded"
+        : "Not compiled";
   const compileStatusText =
     compileStatus === "compiling"
-      ? latestMessage ?? "Reading the page and drafting a tool schema."
+      ? "Agent compiler is drafting reusable tools."
       : compiledToolGroup
-        ? `Compiled ${compiledToolGroup.tools.length} reusable tools. Ready to run with saved tools.`
+        ? `${compiledToolGroup.tools.length} tools saved`
       : compileStatus === "compiled"
-        ? latestMessage ?? "Tool schema is ready to save."
-        : "Describe the workflow, or leave it blank to use the default compile goal.";
+        ? "Recorded tool ready to save"
+        : "No tools saved yet";
 
   return (
     <section className="extension-inspector" aria-label="Compile website">
@@ -80,7 +75,7 @@ export function ExtensionInspector({
 
       <div className={`compile-status compile-status-${compileStatus}`}>
         {isLearningWebsite && <span className="loading-dot" aria-hidden="true" />}
-        <strong>{compileStatus === "compiling" ? "Compiling" : compileStatus === "compiled" ? "Compiled" : "Ready to compile"}</strong>
+        <strong>{compileStatusLabel}</strong>
         <span>{compileStatusText}</span>
       </div>
 
@@ -93,32 +88,6 @@ export function ExtensionInspector({
             placeholder="Leave blank to use the default compile goal."
           />
         </label>
-        <div className="intent-actions">
-          <button
-            type="button"
-            className="primary-button full-width"
-            onClick={hasCompiledWorkflow ? onRunWorkflow : onLearnWebsite}
-            disabled={!isExtension || isLearningWebsite || isRunning}
-          >
-            {isLearningWebsite
-              ? "Compiling..."
-              : hasCompiledWorkflow
-                ? isRunning
-                  ? "Running..."
-                  : "Run with saved tools"
-                : "Confirm and compile"}
-          </button>
-          {hasCompiledWorkflow && (
-            <button
-              type="button"
-              className="secondary-button full-width"
-              onClick={onLearnWebsite}
-              disabled={!isExtension || isLearningWebsite || isRunning}
-            >
-              Recompile tools
-            </button>
-          )}
-        </div>
       </div>
 
       {candidateSchema && (
@@ -138,7 +107,7 @@ export function ExtensionInspector({
           {hasWarnings && (
             <p className="fallback-hint">This suggestion may need a recorded action path.</p>
           )}
-          <button type="button" className="primary-button full-width" onClick={onSaveSchema}>
+          <button type="button" className="secondary-button full-width" onClick={onSaveSchema}>
             Save tool
           </button>
         </div>

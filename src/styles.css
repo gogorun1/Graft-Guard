@@ -41,6 +41,7 @@ button {
   min-width: 360px;
   min-height: 100vh;
   background: #fbfcfd;
+  padding-bottom: 92px;
 }
 
 .extension-panel-stack {
@@ -1144,33 +1145,32 @@ textarea {
 }
 
 .compile-status {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 2px 8px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   margin-bottom: 10px;
-  border: 1px solid #d7dde3;
-  border-radius: 8px;
-  background: #f7fafc;
-  padding: 9px 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .compile-status strong {
   color: #253343;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .compile-status span:last-child {
-  grid-column: 2;
   color: #667585;
   font-size: 12px;
 }
 
 .compile-status-idle::before,
 .compile-status-compiled::before {
-  display: block;
+  display: inline-block;
+  flex: 0 0 auto;
   width: 9px;
   height: 9px;
-  margin-top: 5px;
   border-radius: 999px;
   content: "";
 }
@@ -1212,10 +1212,68 @@ textarea {
   gap: 8px;
 }
 
-.intent-actions {
+.workflow-action-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border-top: 1px solid #cfd8df;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 -8px 24px rgba(21, 35, 48, 0.08);
+  padding: 10px 14px;
+}
+
+.workflow-action-bar-approval {
+  border-top-color: #d7a84b;
+  background: rgba(255, 248, 223, 0.98);
+}
+
+.workflow-action-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.workflow-action-copy strong {
+  color: #1d2b39;
+  font-size: 12px;
+}
+
+.workflow-action-copy span {
+  overflow: hidden;
+  color: #667585;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-action-buttons {
+  display: flex;
+  align-items: center;
   gap: 8px;
+}
+
+.workflow-action-buttons .primary-button,
+.workflow-action-buttons .secondary-button {
+  min-height: 34px;
+  padding: 7px 11px;
+  white-space: nowrap;
+}
+
+.workflow-action-link {
+  border: 0;
+  background: transparent;
+  color: #126b82;
+  padding: 7px 4px;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .learn-actions {

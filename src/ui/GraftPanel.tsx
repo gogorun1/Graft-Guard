@@ -241,17 +241,6 @@ export function GraftPanel({
               </div>
             </div>
           )}
-
-          {compiledToolGroup && isExtension && (
-            <button
-              type="button"
-              className="primary-button full-width"
-              onClick={onRun}
-              disabled={isRunning || schemas.length === 0}
-            >
-              {isRunning ? "Running..." : "Run workflow"}
-            </button>
-          )}
         </section>
       )}
 
@@ -382,7 +371,7 @@ export function GraftPanel({
         </section>
       )}
 
-      {pendingApproval && (
+      {pendingApproval && !isExtension && (
         <ApprovalCard schema={pendingApproval.schema} onAllow={onAllow} onDeny={onDeny} />
       )}
 
