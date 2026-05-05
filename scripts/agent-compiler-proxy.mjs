@@ -1,4 +1,7 @@
 import http from "node:http";
+import { existsSync, readFileSync } from "node:fs";
+
+loadEnvLocal();
 
 const port = Number(process.env.PORT ?? 8787);
 const apiKey = process.env.MINIMAX_API_KEY ?? "";
@@ -124,4 +127,38 @@ function setCors(response) {
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+function loadEnvLocal() {
+  const path = ".env.local";
+  if (!existsSync(path)) {
+    return;
+  }
+
+  const lines = readFileSync(path, "utf8").split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const separator = trimmed.indexOf("=");
+    if (separator === -1) {
+      continue;
+    }
+
+    const key = trimmed.slice(0, separator).trim();
+    const value = unquoteEnvValue(trimmed.slice(separator + 1).trim());
+    process.env[key] = process.env[key] ?? value;
+  }
+}
+
+function unquoteEnvValue(value) {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
 }
