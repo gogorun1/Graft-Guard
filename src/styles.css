@@ -114,6 +114,12 @@ button {
   box-shadow: inset 0 1px #ffffff;
 }
 
+.erp-toolbar button.active-erp-tab {
+  border-color: #1e4e7a;
+  background: linear-gradient(#d9ecff, #8fb3d5);
+  color: #0d3154;
+}
+
 .erp-form {
   display: grid;
   grid-template-columns: repeat(4, minmax(130px, 1fr)) auto auto;
@@ -141,9 +147,22 @@ button {
   padding: 7px 8px;
 }
 
+.erp-form select {
+  width: 100%;
+  border: 1px solid #7b7b7b;
+  border-radius: 0;
+  background: #fffef7;
+  color: #111;
+  padding: 7px 8px;
+}
+
 .erp-form button {
   align-self: end;
   white-space: nowrap;
+}
+
+.invoice-form {
+  grid-template-columns: repeat(2, minmax(150px, 220px)) auto auto;
 }
 
 .erp-summary {
@@ -212,6 +231,96 @@ button {
 .status-flagged {
   color: #8c1616;
   background: #ffe0e0;
+}
+
+.risk-none {
+  color: #126533;
+  background: #dff5e6;
+}
+
+.risk-review {
+  color: #7a4f00;
+  background: #fff0bd;
+}
+
+.risk-blocked {
+  color: #8c1616;
+  background: #ffe0e0;
+}
+
+.invoice-workspace {
+  display: grid;
+  grid-template-columns: minmax(520px, 1fr) 320px;
+  gap: 12px;
+  align-items: start;
+}
+
+.selected-row {
+  outline: 2px solid #2d6ca2;
+  outline-offset: -2px;
+}
+
+.table-action {
+  border: 1px solid #69727d;
+  border-radius: 2px;
+  background: linear-gradient(#ffffff, #c4cbd2);
+  color: #15202b;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 8px;
+}
+
+.invoice-detail {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  border: 2px solid #5e6873;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.invoice-detail span {
+  color: #607080;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.invoice-detail h2 {
+  margin: 2px 0 0;
+  color: #0f2f57;
+  font-size: 20px;
+}
+
+.invoice-detail dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.invoice-detail dl div {
+  border-bottom: 1px solid #e0e5e8;
+  padding-bottom: 6px;
+}
+
+.invoice-detail dt {
+  color: #607080;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.invoice-detail dd {
+  margin: 2px 0 0;
+  color: #14202a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.invoice-detail p {
+  margin: 0;
+  color: #43505d;
+  font-size: 13px;
 }
 
 .graft-panel {
