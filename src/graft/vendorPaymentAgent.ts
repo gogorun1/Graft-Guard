@@ -54,7 +54,7 @@ export function startVendorPaymentWorkflow(request: string, inputs?: WorkflowRun
       {
         type: "tool_call",
         tool: "searchInvoices",
-        message: `Searching ${status} invoices above EUR ${minAmount.toLocaleString("en-US")}${riskFilter === "low-risk-only" ? " with low-risk vendors only" : ""}`,
+        message: `Searching ${status} invoices above EUR ${minAmount.toLocaleString("en-US")}${riskFilterSearchText(riskFilter)}`,
       },
       {
         type: "tool_result",
@@ -118,8 +118,35 @@ function searchInvoices(
     (invoice) =>
       (status === "all" || invoice.status === status) &&
       invoice.amount >= minAmount &&
-      (riskFilter === "all" || invoice.riskFlag === "none"),
+      matchesRiskFilter(invoice.riskFlag, riskFilter),
   );
+}
+
+function matchesRiskFilter(
+  riskFlag: Invoice["riskFlag"],
+  riskFilter: WorkflowRunInputs["riskFilter"],
+): boolean {
+  if (riskFilter === "all") {
+    return true;
+  }
+
+  if (riskFilter === "flagged") {
+    return riskFlag !== "none";
+  }
+
+  return riskFlag === riskFilter;
+}
+
+function riskFilterSearchText(riskFilter: WorkflowRunInputs["riskFilter"]): string {
+  const text: Record<WorkflowRunInputs["riskFilter"], string> = {
+    all: "",
+    none: " with clear vendors only",
+    review: " with review-flagged vendors only",
+    blocked: " with blocked vendors only",
+    flagged: " with flagged vendors only",
+  };
+
+  return text[riskFilter];
 }
 
 function inferInvoiceStatus(request: string): WorkflowRunInputs["status"] {

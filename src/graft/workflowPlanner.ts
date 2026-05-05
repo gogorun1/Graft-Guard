@@ -3,7 +3,7 @@ import type { ToolSchema } from "./schemaTypes";
 export type WorkflowRunInputs = {
   status: "all" | "overdue" | "pending" | "paid";
   minAmount: number;
-  riskFilter: "all" | "low-risk-only";
+  riskFilter: "all" | "none" | "review" | "blocked" | "flagged";
 };
 
 export type WorkflowTaskPlan = {
@@ -42,10 +42,7 @@ export function inferWorkflowRunInputs(prompt: string, current = defaultWorkflow
 
 export function formatVendorPaymentPrompt(inputs: WorkflowRunInputs): string {
   const statusText = inputs.status === "all" ? "all invoices" : `${inputs.status} invoices`;
-  const riskText =
-    inputs.riskFilter === "low-risk-only"
-      ? " Include only low-risk vendors."
-      : "";
+  const riskText = riskFilterPromptText(inputs.riskFilter);
 
   return `Prepare a vendor payment packet for ${statusText} above EUR ${inputs.minAmount.toLocaleString("en-US")}, but do not export bank details without approval.${riskText}`;
 }
@@ -183,15 +180,39 @@ function inferInvoiceStatus(prompt: string): WorkflowRunInputs["status"] | undef
 }
 
 function inferRiskFilter(prompt: string): WorkflowRunInputs["riskFilter"] | undefined {
-  if (/\b(low[- ]risk|exclude high[- ]risk|only low[- ]risk)\b/i.test(prompt)) {
-    return "low-risk-only";
+  if (/\b(low[- ]risk|clear vendors?|no risk|risk flag none|exclude flagged|exclude high[- ]risk|only low[- ]risk)\b/i.test(prompt)) {
+    return "none";
   }
 
-  if (/\b(all vendors|include flagged|include high[- ]risk)\b/i.test(prompt)) {
+  if (/\b(review vendors?|manual review|risk flag review)\b/i.test(prompt)) {
+    return "review";
+  }
+
+  if (/\b(blocked vendors?|risk flag blocked|blocked only)\b/i.test(prompt)) {
+    return "blocked";
+  }
+
+  if (/\b(flagged vendors?|include flagged|review or blocked|high[- ]risk)\b/i.test(prompt)) {
+    return "flagged";
+  }
+
+  if (/\b(all vendors|all risk|any risk)\b/i.test(prompt)) {
     return "all";
   }
 
   return undefined;
+}
+
+function riskFilterPromptText(riskFilter: WorkflowRunInputs["riskFilter"]): string {
+  const text: Record<WorkflowRunInputs["riskFilter"], string> = {
+    all: "",
+    none: " Include only vendors with no risk flag.",
+    review: " Include only vendors flagged for review.",
+    blocked: " Include only blocked vendors.",
+    flagged: " Include only flagged vendors.",
+  };
+
+  return text[riskFilter];
 }
 
 function mentionsCreditHold(prompt: string): boolean {

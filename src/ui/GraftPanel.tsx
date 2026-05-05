@@ -332,7 +332,10 @@ export function GraftPanel({
                   }
                 >
                   <option value="all">All vendors</option>
-                  <option value="low-risk-only">Low-risk only</option>
+                  <option value="none">Clear only</option>
+                  <option value="review">Review only</option>
+                  <option value="blocked">Blocked only</option>
+                  <option value="flagged">Flagged only</option>
                 </select>
               </label>
             </div>
@@ -365,7 +368,7 @@ export function GraftPanel({
           {vendorAgentEvents.length > 0 && (
             <ol className="agent-workflow-list">
               {vendorAgentEvents.map((event, index) => (
-                <li key={`${event.type}-${index}`} className={`agent-event-${event.type}`}>
+                <li key={`${event.type}-${index}`} className={workflowEventClass(event, pendingApproval)}>
                   <strong>{eventLabel(event.type)}</strong>
                   <span>{event.message}</span>
                 </li>
@@ -658,6 +661,16 @@ function eventLabel(type: VendorAgentEvent["type"]): string {
     packet_generated: "Packet",
   };
   return labels[type];
+}
+
+function workflowEventClass(event: VendorAgentEvent, pendingApproval?: PendingApproval): string {
+  if (event.type !== "guard_required") {
+    return `agent-event-${event.type}`;
+  }
+
+  return pendingApproval?.schema.name === event.tool
+    ? "agent-event-guard_required agent-event-guard-active"
+    : "agent-event-guard_required agent-event-guard-resolved";
 }
 
 function runStatusLabel(
