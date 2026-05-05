@@ -86,7 +86,8 @@ The extension shell currently collects:
 
 Do not put MiniMax API keys in browser code.
 
-The frontend expects a proxy when MiniMax is enabled. For local demos, create `.env.local`:
+The frontend expects a proxy when MiniMax is enabled. For local demos, create `.env.local`.
+Only the API key is required for the proxy; the MiniMax endpoint and model have defaults:
 
 ```bash
 VITE_AGENT_PROVIDER=minimax
@@ -94,6 +95,11 @@ VITE_MINIMAX_PROXY_URL=http://localhost:8787
 VITE_MINIMAX_MODEL=MiniMax-M2.7
 
 MINIMAX_API_KEY=your-key
+```
+
+Optional overrides:
+
+```bash
 MINIMAX_API_URL=https://api.minimax.io/v1/chat/completions
 MINIMAX_MODEL=MiniMax-M2.7
 ```

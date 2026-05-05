@@ -5,8 +5,8 @@ loadEnvLocal();
 
 const port = Number(process.env.PORT ?? 8787);
 const apiKey = process.env.MINIMAX_API_KEY ?? "";
-const apiUrl = process.env.MINIMAX_API_URL ?? "";
-const model = process.env.MINIMAX_MODEL ?? "MiniMax-M1";
+const apiUrl = process.env.MINIMAX_API_URL ?? "https://api.minimax.io/v1/chat/completions";
+const model = process.env.MINIMAX_MODEL ?? "MiniMax-M2.7";
 
 const server = http.createServer(async (request, response) => {
   setCors(response);
@@ -22,9 +22,9 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
-  if (!apiKey || !apiUrl) {
+  if (!apiKey) {
     sendJson(response, 503, {
-      error: "MINIMAX_API_KEY and MINIMAX_API_URL must be configured on the proxy.",
+      error: "MINIMAX_API_KEY must be configured on the proxy.",
     });
     return;
   }

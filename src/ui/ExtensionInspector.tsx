@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { CapturedStep, PageDomSummary } from "../extension/pageSummary";
 import type { AgentMessage as AgentMessageModel } from "../graft/agentNarrator";
+import type { CompiledToolGroup } from "../graft/agentCompiler";
 import { schemaSignature } from "../graft/schemaCompiler";
 import type { ToolSchema } from "../graft/schemaTypes";
 
@@ -10,6 +11,7 @@ type Props = {
   capturedSteps: CapturedStep[];
   candidateSchema?: ToolSchema;
   candidateWarnings: string[];
+  compiledToolGroup?: CompiledToolGroup;
   error?: string;
   intent: string;
   isCapturing: boolean;
@@ -32,6 +34,7 @@ export function ExtensionInspector({
   capturedSteps,
   candidateSchema,
   candidateWarnings,
+  compiledToolGroup,
   error,
   intent,
   isCapturing,
@@ -49,11 +52,13 @@ export function ExtensionInspector({
 }: Props) {
   const hasWarnings = candidateWarnings.length > 0;
   const showCustomTool = isCapturing || hasWarnings || Boolean(error);
-  const compileStatus = isLearningWebsite ? "compiling" : candidateSchema ? "compiled" : "idle";
+  const compileStatus = isLearningWebsite ? "compiling" : candidateSchema || compiledToolGroup ? "compiled" : "idle";
   const latestMessage = agentMessages[0]?.text;
   const compileStatusText =
     compileStatus === "compiling"
       ? latestMessage ?? "Reading the page and drafting a tool schema."
+      : compiledToolGroup
+        ? `Compiled ${compiledToolGroup.tools.length} tools via ${compiledToolGroup.provider === "agent-api" ? "Agent API" : "local fallback"}.`
       : compileStatus === "compiled"
         ? latestMessage ?? "Tool schema is ready to save."
         : "Describe the workflow, or leave it blank to use the default compile goal.";
@@ -89,7 +94,7 @@ export function ExtensionInspector({
           onClick={onLearnWebsite}
           disabled={!isExtension || isLearningWebsite}
         >
-          {isLearningWebsite ? "Compiling..." : candidateSchema ? "Confirm and recompile" : "Confirm and compile"}
+          {isLearningWebsite ? "Compiling..." : candidateSchema || compiledToolGroup ? "Confirm and recompile" : "Confirm and compile"}
         </button>
       </div>
 

@@ -44,6 +44,7 @@ import { ExtensionInspector } from "./ui/ExtensionInspector";
 const presetCommand = "Prepare a vendor payment packet for all overdue invoices above EUR 5,000, but do not export bank details without approval.";
 const defaultWebsiteIntent = presetCommand;
 const fakeCompileDelayMs = 2000;
+const simulatedRunDelayMs = 1200;
 
 type PendingApproval = {
   schema: ToolSchema;
@@ -580,6 +581,7 @@ export default function App() {
     setPendingBankInvoiceIds(undefined);
 
     try {
+      await sleep(simulatedRunDelayMs);
       const run = startVendorPaymentWorkflow(command);
       setVendorAgentEvents(run.events);
 
@@ -716,6 +718,7 @@ export default function App() {
           capturedSteps={capturedSteps}
           candidateSchema={candidateTool?.schema}
           candidateWarnings={candidateTool?.warnings ?? []}
+          compiledToolGroup={compiledToolGroup}
           error={inspectionError}
           intent={websiteIntent}
           isCapturing={isCapturing}

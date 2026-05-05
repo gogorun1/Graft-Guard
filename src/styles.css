@@ -734,6 +734,20 @@ textarea {
   font-weight: 700;
 }
 
+.workflow-run-loading {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid #d7dde3;
+  border-radius: 8px;
+  background: #f7fafc;
+  color: #405064;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .compiled-workflow-card {
   display: grid;
   gap: 4px;
@@ -757,6 +771,24 @@ textarea {
 .compiled-workflow-card small {
   color: #607080;
   font-size: 11px;
+  font-weight: 800;
+}
+
+.compiled-tool-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.compiled-tool-pills span {
+  border: 1px solid #c7dbe2;
+  border-radius: 999px;
+  background: #fff;
+  color: #225569;
+  padding: 3px 7px;
+  font-family: SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
   font-weight: 800;
 }
 

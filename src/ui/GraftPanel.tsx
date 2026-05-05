@@ -91,23 +91,6 @@ export function GraftPanel({
         </section>
       )}
 
-      {vendorAgentEvents.length > 0 && (
-        <section className="panel-section">
-          <div className="section-heading">
-            <h3>Agent workflow</h3>
-            <span>{vendorAgentEvents.length} events</span>
-          </div>
-          <ol className="agent-workflow-list">
-            {vendorAgentEvents.map((event, index) => (
-              <li key={`${event.type}-${index}`}>
-                <strong>{eventLabel(event.type)}</strong>
-                <span>{event.message}</span>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-
       {!isExtension && <AgentMessageStream messages={agentMessages} />}
 
       {compiledToolGroup && (
@@ -120,6 +103,11 @@ export function GraftPanel({
             <strong>{compiledToolGroup.name}</strong>
             <span>{compiledToolGroup.description}</span>
             <small>{compiledToolGroup.tools.length} typed tools · {compiledToolGroup.workflowPlan.length} planned steps</small>
+            <div className="compiled-tool-pills" aria-label="Compiled tools">
+              {compiledToolGroup.tools.map((tool) => (
+                <span key={tool.name}>{tool.name}</span>
+              ))}
+            </div>
           </div>
           {isExtension && (
             <button
@@ -130,6 +118,31 @@ export function GraftPanel({
             >
               {isRunning ? "Running..." : "Run workflow"}
             </button>
+          )}
+        </section>
+      )}
+
+      {(isRunning || vendorAgentEvents.length > 0) && compiledToolGroup && (
+        <section className="panel-section">
+          <div className="section-heading">
+            <h3>Workflow run</h3>
+            <span>{runStatusLabel(isRunning, pendingApproval, vendorAgentEvents.length)}</span>
+          </div>
+          {isRunning && vendorAgentEvents.length === 0 && (
+            <div className="workflow-run-loading">
+              <span className="loading-dot" aria-hidden="true" />
+              <span>Running the saved workflow against the current page.</span>
+            </div>
+          )}
+          {vendorAgentEvents.length > 0 && (
+            <ol className="agent-workflow-list">
+              {vendorAgentEvents.map((event, index) => (
+                <li key={`${event.type}-${index}`}>
+                  <strong>{eventLabel(event.type)}</strong>
+                  <span>{event.message}</span>
+                </li>
+              ))}
+            </ol>
           )}
         </section>
       )}
@@ -334,6 +347,22 @@ function eventLabel(type: VendorAgentEvent["type"]): string {
     packet_generated: "Packet",
   };
   return labels[type];
+}
+
+function runStatusLabel(
+  isRunning: boolean,
+  pendingApproval: PendingApproval | undefined,
+  eventCount: number,
+): string {
+  if (isRunning) {
+    return "running";
+  }
+
+  if (pendingApproval?.schema.name === "exportBankDetails") {
+    return "approval needed";
+  }
+
+  return `${eventCount} events`;
 }
 
 function inputTypeForProperty(property: unknown): string {
