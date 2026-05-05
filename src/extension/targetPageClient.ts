@@ -1,7 +1,11 @@
-import type { PageDomSummary } from "./pageSummary";
+import type { CapturedStep, PageDomSummary } from "./pageSummary";
 
 type CollectResponse =
   | { ok: true; summary: PageDomSummary }
+  | { ok: false; error: string };
+
+type CaptureResponse =
+  | { ok: true; steps: CapturedStep[] }
   | { ok: false; error: string };
 
 export function isExtensionRuntime(): boolean {
@@ -9,6 +13,36 @@ export function isExtensionRuntime(): boolean {
 }
 
 export async function collectActivePageSummary(): Promise<PageDomSummary> {
+  const tab = await getInspectableActiveTab();
+  const response = await withInjectedContentScript(tab.id, () => sendCollectMessage(tab.id));
+  return response.summary;
+}
+
+export async function startActivePageCapture(): Promise<void> {
+  const tab = await getInspectableActiveTab();
+  await withInjectedContentScript(tab.id, () =>
+    chrome.tabs.sendMessage(tab.id, {
+      type: "GRAFT_GUARD_START_CAPTURE",
+    }),
+  );
+}
+
+export async function stopActivePageCapture(): Promise<CapturedStep[]> {
+  const tab = await getInspectableActiveTab();
+  const response = (await withInjectedContentScript(tab.id, () =>
+    chrome.tabs.sendMessage(tab.id, {
+      type: "GRAFT_GUARD_STOP_CAPTURE",
+    }),
+  )) as CaptureResponse;
+
+  if (!response.ok) {
+    throw new Error(response.error);
+  }
+
+  return response.steps;
+}
+
+async function getInspectableActiveTab(): Promise<{ id: number; url: string }> {
   if (!isExtensionRuntime()) {
     throw new Error("Graft Guard is running in standalone demo mode.");
   }
@@ -19,22 +53,22 @@ export async function collectActivePageSummary(): Promise<PageDomSummary> {
     throw new Error("No active tab is available.");
   }
 
-  const tabId = tab.id;
-
   if (isRestrictedUrl(tab.url)) {
     throw new Error("Chrome does not allow extensions to inspect this page. Open a normal http or https page.");
   }
 
-  const response = await sendCollectMessage(tabId).catch(async (error: unknown) => {
+  return { id: tab.id, url: tab.url };
+}
+
+async function withInjectedContentScript<T>(tabId: number, operation: () => Promise<T>): Promise<T> {
+  return operation().catch(async (error: unknown) => {
     if (!isMissingReceiverError(error)) {
       throw error;
     }
 
     await injectContentScript(tabId);
-    return sendCollectMessage(tabId);
+    return operation();
   });
-
-  return response.summary;
 }
 
 async function sendCollectMessage(tabId: number): Promise<{ ok: true; summary: PageDomSummary }> {

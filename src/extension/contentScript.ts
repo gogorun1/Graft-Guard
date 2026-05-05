@@ -1,5 +1,6 @@
 import type {
   ExtensionMessage,
+  CapturedStep,
   PageButtonSummary,
   PageDomSummary,
   PageFormSummary,
@@ -7,14 +8,99 @@ import type {
   PageTableSummary,
 } from "./pageSummary";
 
+let isCapturing = false;
+let capturedSteps: CapturedStep[] = [];
+let lastInputBySelector = new Map<string, CapturedStep>();
+
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
-  if (message.type !== "GRAFT_GUARD_COLLECT_PAGE") {
-    return false;
+  if (message.type === "GRAFT_GUARD_COLLECT_PAGE") {
+    sendResponse({ ok: true, summary: collectPageSummary() });
+    return true;
   }
 
-  sendResponse({ ok: true, summary: collectPageSummary() });
-  return true;
+  if (message.type === "GRAFT_GUARD_START_CAPTURE") {
+    startCapture();
+    sendResponse({ ok: true });
+    return true;
+  }
+
+  if (message.type === "GRAFT_GUARD_STOP_CAPTURE") {
+    const steps = stopCapture();
+    sendResponse({ ok: true, steps });
+    return true;
+  }
+
+  return false;
 });
+
+function startCapture() {
+  capturedSteps = [];
+  lastInputBySelector = new Map();
+  isCapturing = true;
+  document.addEventListener("input", handleCapturedInput, true);
+  document.addEventListener("change", handleCapturedInput, true);
+  document.addEventListener("click", handleCapturedClick, true);
+}
+
+function stopCapture(): CapturedStep[] {
+  isCapturing = false;
+  document.removeEventListener("input", handleCapturedInput, true);
+  document.removeEventListener("change", handleCapturedInput, true);
+  document.removeEventListener("click", handleCapturedClick, true);
+
+  return capturedSteps;
+}
+
+function handleCapturedInput(event: Event) {
+  if (!isCapturing || !(event.target instanceof HTMLElement)) {
+    return;
+  }
+
+  const target = event.target;
+
+  if (!isInputElement(target) || isSensitiveInput(target)) {
+    return;
+  }
+
+  const selector = bestSelector(target);
+  const step: CapturedStep = {
+    type: "setValue",
+    selector,
+    label: findLabel(target),
+    inputType: inputType(target),
+    valuePreview: previewInputValue(target),
+  };
+
+  const previous = lastInputBySelector.get(selector);
+  if (previous) {
+    const index = capturedSteps.indexOf(previous);
+    if (index >= 0) {
+      capturedSteps[index] = step;
+    }
+  } else {
+    capturedSteps.push(step);
+  }
+
+  lastInputBySelector.set(selector, step);
+}
+
+function handleCapturedClick(event: MouseEvent) {
+  if (!isCapturing || !(event.target instanceof HTMLElement)) {
+    return;
+  }
+
+  const target = event.target.closest<HTMLElement>("button, input[type='button'], input[type='submit'], a[href]");
+  if (!target || !isVisible(target)) {
+    return;
+  }
+
+  capturedSteps.push({
+    type: "click",
+    selector: bestSelector(target),
+    label: visibleText(target),
+    tagName: target.tagName.toLowerCase(),
+  });
+}
 
 function collectPageSummary(): PageDomSummary {
   const inputs = visibleElements<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
@@ -89,11 +175,19 @@ function summarizeForm(form: HTMLFormElement): PageFormSummary {
 }
 
 function visibleElements<T extends HTMLElement>(selector: string): T[] {
-  return Array.from(document.querySelectorAll<T>(selector)).filter((element) => {
-    const rect = element.getBoundingClientRect();
-    const style = window.getComputedStyle(element);
-    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
-  });
+  return Array.from(document.querySelectorAll<T>(selector)).filter(isVisible);
+}
+
+function isVisible(element: HTMLElement): boolean {
+  const rect = element.getBoundingClientRect();
+  const style = window.getComputedStyle(element);
+  return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+}
+
+function isInputElement(
+  element: HTMLElement,
+): element is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement {
+  return element instanceof HTMLInputElement || element instanceof HTMLSelectElement || element instanceof HTMLTextAreaElement;
 }
 
 function isSensitiveInput(element: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement): boolean {
@@ -112,6 +206,15 @@ function inputType(element: HTMLInputElement | HTMLSelectElement | HTMLTextAreaE
   }
 
   return element.tagName.toLowerCase();
+}
+
+function previewInputValue(element: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement): string {
+  if (element instanceof HTMLInputElement && (element.type === "checkbox" || element.type === "radio")) {
+    return element.checked ? "checked" : "unchecked";
+  }
+
+  const value = element.value;
+  return value.length > 80 ? `${value.slice(0, 77)}...` : value;
 }
 
 function findLabel(element: HTMLElement): string | undefined {

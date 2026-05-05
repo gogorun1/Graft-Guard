@@ -1,7 +1,12 @@
 import { useMemo, useState } from "react";
 import { DemoErp } from "./demo-erp/DemoErp";
-import { collectActivePageSummary, isExtensionRuntime } from "./extension/targetPageClient";
-import type { PageDomSummary } from "./extension/pageSummary";
+import {
+  collectActivePageSummary,
+  isExtensionRuntime,
+  startActivePageCapture,
+  stopActivePageCapture,
+} from "./extension/targetPageClient";
+import type { CapturedStep, PageDomSummary } from "./extension/pageSummary";
 import { createAuditEvent, type AuditEvent } from "./graft/auditLog";
 import { activeParserLabel, parseNaturalLanguageCommand } from "./graft/commandParser";
 import { compileApp, loadCachedSchemas } from "./graft/schemaCompiler";
@@ -30,6 +35,8 @@ export default function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [isInspecting, setIsInspecting] = useState(false);
   const [pageSummary, setPageSummary] = useState<PageDomSummary>();
+  const [capturedSteps, setCapturedSteps] = useState<CapturedStep[]>([]);
+  const [isCapturing, setIsCapturing] = useState(false);
   const [inspectionError, setInspectionError] = useState<string>();
   const isExtension = isExtensionRuntime();
 
@@ -107,6 +114,53 @@ export default function App() {
       });
     } finally {
       setIsInspecting(false);
+    }
+  }
+
+  async function handleStartCapture() {
+    setInspectionError(undefined);
+    setCapturedSteps([]);
+
+    try {
+      await startActivePageCapture();
+      setIsCapturing(true);
+      addAudit({
+        type: "replay_started",
+        message: "Workflow capture started on active page",
+        llmCalls: 0,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Workflow capture failed to start";
+      setInspectionError(message);
+      addAudit({
+        type: "replay_failed",
+        message,
+        llmCalls: 0,
+      });
+    }
+  }
+
+  async function handleStopCapture() {
+    setInspectionError(undefined);
+
+    try {
+      const steps = await stopActivePageCapture();
+      setCapturedSteps(steps);
+      setIsCapturing(false);
+      addAudit({
+        type: "replay_completed",
+        message: `Workflow capture stopped with ${steps.length} steps`,
+        llmCalls: 0,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Workflow capture failed to stop";
+      setInspectionError(message);
+      setIsCapturing(false);
+      addAudit({
+        type: "replay_failed",
+        message,
+        llmCalls: 0,
+      });
     }
   }
 
@@ -243,11 +297,15 @@ export default function App() {
       <div className={isExtension ? "extension-panel-stack" : undefined}>
         {isExtension && (
           <ExtensionInspector
+            capturedSteps={capturedSteps}
             error={inspectionError}
+            isCapturing={isCapturing}
             isExtension={isExtension}
             isInspecting={isInspecting}
             summary={pageSummary}
             onInspect={handleInspectActivePage}
+            onStartCapture={handleStartCapture}
+            onStopCapture={handleStopCapture}
           />
         )}
         <GraftPanel

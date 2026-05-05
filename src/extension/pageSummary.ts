@@ -36,8 +36,31 @@ export type PageDomSummary = {
   tables: PageTableSummary[];
 };
 
+export type CapturedStep =
+  | {
+      type: "setValue";
+      selector: string;
+      label?: string;
+      inputType: string;
+      valuePreview: string;
+    }
+  | {
+      type: "click";
+      selector: string;
+      label?: string;
+      tagName: string;
+    };
+
 export type CollectPageSummaryMessage = {
   type: "GRAFT_GUARD_COLLECT_PAGE";
 };
 
-export type ExtensionMessage = CollectPageSummaryMessage;
+export type StartCaptureMessage = {
+  type: "GRAFT_GUARD_START_CAPTURE";
+};
+
+export type StopCaptureMessage = {
+  type: "GRAFT_GUARD_STOP_CAPTURE";
+};
+
+export type ExtensionMessage = CollectPageSummaryMessage | StartCaptureMessage | StopCaptureMessage;

@@ -483,6 +483,18 @@ textarea {
   margin-top: 10px;
 }
 
+.extension-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.active-capture {
+  border-color: #b4532d;
+  background: #fff0e9;
+  color: #8a2d14;
+}
+
 .error-state {
   border: 1px solid #f0b7b7;
   border-radius: 6px;
@@ -566,6 +578,45 @@ textarea {
 .summary-list li {
   color: #344657;
   font-size: 12px;
+}
+
+.capture-summary {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  border: 1px solid #cbd8df;
+  border-radius: 6px;
+  background: #f7fafc;
+  padding: 10px;
+}
+
+.capture-summary .section-heading {
+  margin-bottom: 0;
+}
+
+.capture-summary ol {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.capture-summary li {
+  color: #2d3e4f;
+  font-size: 13px;
+}
+
+.capture-summary strong {
+  color: #126b82;
+}
+
+.capture-summary small {
+  display: block;
+  overflow: hidden;
+  color: #6c7b88;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .empty-state {
