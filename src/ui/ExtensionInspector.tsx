@@ -62,29 +62,6 @@ export function ExtensionInspector({
 
       <AgentMessageStream messages={agentMessages} />
 
-      {candidateSchema && (
-        <div className="candidate-schema">
-          <div className="section-heading">
-            <h3>Suggested tool</h3>
-            <span>{candidateSchema.risk}</span>
-          </div>
-          <code>{schemaSignature(candidateSchema)}</code>
-          {candidateWarnings.length > 0 && (
-            <ul className="warning-list">
-              {candidateWarnings.map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-            </ul>
-          )}
-          {hasWarnings && (
-            <p className="fallback-hint">If this suggestion looks unstable, show Graft Guard the workflow once.</p>
-          )}
-          <button type="button" className="primary-button full-width" onClick={onSaveSchema}>
-            Save tool
-          </button>
-        </div>
-      )}
-
       {summary && (
         <div className="learned-page-chip">
           <strong>{summary.title}</strong>
@@ -111,6 +88,29 @@ export function ExtensionInspector({
           Describe what you want to automate
           <textarea value={intent} onChange={(event) => onIntentChange(event.target.value)} />
         </label>
+      )}
+
+      {candidateSchema && (
+        <div className="candidate-schema">
+          <div className="section-heading">
+            <h3>Suggested tool</h3>
+            <span>{candidateSchema.risk}</span>
+          </div>
+          <code>{schemaSignature(candidateSchema)}</code>
+          {candidateWarnings.length > 0 && (
+            <ul className="warning-list">
+              {candidateWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          )}
+          {hasWarnings && (
+            <p className="fallback-hint">If this suggestion looks unstable, show Graft Guard the workflow once.</p>
+          )}
+          <button type="button" className="primary-button full-width" onClick={onSaveSchema}>
+            Save tool
+          </button>
+        </div>
       )}
 
       {showAdvancedButton && (
