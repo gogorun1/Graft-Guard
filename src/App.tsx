@@ -251,10 +251,11 @@ export default function App() {
       const summary = await collectActivePageSummary();
       setPageSummary(summary);
       addAgentMessage({ type: "compile_started", summary });
+      const stopCompileStages = startCompileStageMessages(summary, addAgentMessage);
 
       const effectiveIntent = websiteIntent.trim() || defaultWebsiteIntent;
       setCommand(effectiveIntent);
-      const group = await compileToolGroupWithAgent({ prompt: effectiveIntent, pageSummary: summary });
+      const group = await compileToolGroupWithAgent({ prompt: effectiveIntent, pageSummary: summary }).finally(stopCompileStages);
       setCompiledToolGroup(group);
       setSchemas([]);
       setSelectedToolName(group.tools[0]?.name ?? "generatedTool");
@@ -827,6 +828,28 @@ function defaultParamValue(property: unknown): string {
 
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function startCompileStageMessages(
+  summary: PageDomSummary,
+  addAgentMessage: (event: AgentNarratorInput) => void,
+): () => void {
+  addAgentMessage({ type: "compile_stage", stage: "send_to_compiler", summary });
+
+  const timers = [
+    window.setTimeout(() => {
+      addAgentMessage({ type: "compile_stage", stage: "normalize_draft", summary });
+    }, 700),
+    window.setTimeout(() => {
+      addAgentMessage({ type: "compile_stage", stage: "attach_guard", summary });
+    }, 1400),
+  ];
+
+  return () => {
+    for (const timer of timers) {
+      window.clearTimeout(timer);
+    }
+  };
 }
 
 function isVendorPaymentRequest(command: string): boolean {

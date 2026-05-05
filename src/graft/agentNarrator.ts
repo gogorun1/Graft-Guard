@@ -18,6 +18,13 @@ export type AgentMessage = {
 export type AgentNarratorEvent =
   | { id: string; timestamp: number; type: "page_observed"; summary: PageDomSummary }
   | { id: string; timestamp: number; type: "compile_started"; summary?: PageDomSummary }
+  | {
+      id: string;
+      timestamp: number;
+      type: "compile_stage";
+      stage: "send_to_compiler" | "normalize_draft" | "attach_guard";
+      summary?: PageDomSummary;
+    }
   | { id: string; timestamp: number; type: "compile_group_succeeded"; group: CompiledToolGroup; summary: PageDomSummary }
   | {
       id: string;
@@ -56,10 +63,37 @@ export function narrateAgentEvent(event: AgentNarratorEvent): AgentMessage | nul
     return message(event, {
       icon: "brain",
       phase: "compile",
-      text: "Reading the page and planning a reusable workflow.",
+      text: "Reading the page structure and workflow goal.",
       detail: event.summary
-        ? `Observed ${event.summary.inputs.length} inputs, ${event.summary.buttons.length} actions, and ${event.summary.tables.length} tables.`
+        ? `Observed ${event.summary.inputs.length} inputs, ${event.summary.buttons.length} actions, and ${event.summary.tables.length} tables: ${summarizeInputs(event.summary)}.`
         : "Using the known Acme ERP workflow.",
+    });
+  }
+
+  if (event.type === "compile_stage") {
+    if (event.stage === "send_to_compiler") {
+      return message(event, {
+        icon: "brain",
+        phase: "compile",
+        text: "Sending the goal and page summary to the compiler.",
+        detail: "MiniMax can produce an AgentDraft; Graft Guard will keep selector and replay execution local.",
+      });
+    }
+
+    if (event.stage === "normalize_draft") {
+      return message(event, {
+        icon: "search",
+        phase: "compile",
+        text: "Normalizing the agent draft into reusable typed tools.",
+        detail: "Mapping semantic capabilities to stable tool names, parameters, risks, and replay plans.",
+      });
+    }
+
+    return message(event, {
+      icon: "warning",
+      phase: "compile",
+      text: "Checking the workflow for guarded actions.",
+      detail: "Exports, destructive actions, and sensitive business data are marked for approval before replay.",
     });
   }
 
