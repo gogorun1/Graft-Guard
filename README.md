@@ -2,12 +2,12 @@
 
 Graft Guard compiles stable web workflows into typed, cached, guarded tools.
 
-The current project has two modes:
+The current project has two surfaces:
 
-- Standalone hackathon demo with the fake Acme ERP app.
-- Chrome MV3 extension shell that can inspect the active page through a content script.
+- Standalone Acme ERP website, which is only the legacy target app.
+- Chrome MV3 extension side panel, which is the Graft Guard product UI.
 
-## Run Standalone Demo
+## Run Standalone ERP Target
 
 ```bash
 npm install
@@ -20,64 +20,43 @@ Open:
 http://127.0.0.1:5173/
 ```
 
-Demo flow:
+The standalone page intentionally has no Graft Guard sidebar. It should look like a plain legacy ERP app. Acme ERP defaults to the `Invoices` section with overdue vendor invoices and bank details.
 
-1. Click `Compile this app`.
-2. Review the compiled vendor payment tool group:
+## Vendor Payment Demo Script
+
+Use this 60-second path for live demos:
+
+1. Run the standalone ERP target.
+2. Build and load the Chrome extension from `dist/`.
+3. Open the Graft Guard side panel on the ERP page.
+4. Keep the default prompt:
+
+```txt
+Prepare a vendor payment packet for all overdue invoices above EUR 5,000, but do not export bank details without approval.
+```
+
+5. Click `Confirm and compile`.
+6. Show the compiled workflow:
+   - provider: `Agent API` if the proxy is configured, otherwise `local fallback`
    - `searchInvoices(status: "overdue", minAmount: Number): Invoice[]`
    - `openInvoice(invoiceId: String): InvoiceDetail`
    - `extractPaymentPacket(invoiceIds: String[]): PaymentPacket`
    - `exportBankDetails(invoiceIds: String[]): CsvFile`
-3. Use the preset command:
-
-```txt
-Prepare payment packet for overdue invoices above 5000 euros.
-```
-
-4. Click `Run tool`.
-5. Watch the agent workflow:
+7. Click `Run workflow`.
+8. Watch the agent workflow:
    - searches overdue invoices above EUR 5,000
    - opens invoice details
    - prepares a payment packet
    - reaches guarded bank details export
-6. When Guard asks for approval, click `Deny`.
-7. Confirm the workflow continues and generates a payment packet with bank details redacted.
-8. Confirm audit shows business events such as:
+9. When Guard asks for approval, click `Deny`.
+10. Confirm the workflow continues and generates a payment packet with bank details redacted.
+11. Confirm audit shows business events such as:
    - invoices scanned
    - invoice details opened
    - bank export denied
    - payment packet generated with redactions
 
 This is the primary hackathon demo. It shows Graft Guard as a governed agent workflow layer, not just a form replay script.
-
-## Vendor Payment Demo Script
-
-Use this 60-second path for live demos:
-
-1. Open the standalone app.
-2. Point out that Acme ERP defaults to the `Invoices` section.
-3. Click `Compile this app`.
-4. Show the four compiled tools in `Compiled tools`.
-5. Run:
-
-```txt
-Prepare payment packet for overdue invoices above 5000 euros.
-```
-
-6. Let the workflow reach the Guard card:
-
-```txt
-exportBankDetails(invoiceIds: String[]): CsvFile
-```
-
-7. Click `Deny`.
-8. Show the final packet:
-   - total payment amount
-   - flagged vendors
-   - needs approval count
-   - bank details marked `redacted`
-
-The important product moment is that denying bank export does not cancel the whole workflow. The agent still completes the payment packet with redactions.
 
 ## Build Extension
 
@@ -107,20 +86,33 @@ The extension shell currently collects:
 
 Do not put MiniMax API keys in browser code.
 
-The frontend expects a proxy when MiniMax is enabled:
+The frontend expects a proxy when MiniMax is enabled. For local demos, run:
+
+```bash
+MINIMAX_API_KEY=your-key \
+MINIMAX_API_URL=https://your-minimax-chat-endpoint \
+MINIMAX_MODEL=your-model-name \
+npm run dev:agent-proxy
+```
+
+Then start the frontend with:
 
 ```bash
 VITE_AGENT_PROVIDER=minimax
-VITE_MINIMAX_PROXY_URL=https://your-proxy.example.com
+VITE_MINIMAX_PROXY_URL=http://localhost:8787
 VITE_MINIMAX_MODEL=your-model-name
+npm run dev
 ```
 
 Expected proxy endpoints:
 
+- `POST /compile-tool-group`
 - `POST /compile`
 - `POST /parse-command`
 
-The proxy should own API keys, model selection, rate limits, retries, and provider logs. The extension keeps schema validation, approval, replay, and audit local.
+The proxy owns API keys, model selection, rate limits, retries, and provider logs. The extension keeps schema validation, approval, replay, Guard decisions, redaction, and audit local.
+
+If the proxy is not configured or the model returns invalid JSON, Graft Guard falls back to the deterministic local compiler and labels the workflow as `local fallback`.
 
 ## Current Scope
 

@@ -28,6 +28,11 @@ import { replayTool } from "./graft/replayEngine";
 import type { ReplayResult, ReplayTrace, ToolSchema } from "./graft/schemaTypes";
 import { requiresApproval } from "./graft/guardEngine";
 import {
+  compileToolGroupWithAgent,
+  isVendorPaymentPage,
+  type CompiledToolGroup,
+} from "./graft/agentCompiler";
+import {
   finishVendorPaymentWorkflow,
   startVendorPaymentWorkflow,
   type PaymentPacket,
@@ -36,8 +41,8 @@ import {
 import { GraftPanel } from "./ui/GraftPanel";
 import { ExtensionInspector } from "./ui/ExtensionInspector";
 
-const presetCommand = "Prepare payment packet for overdue invoices above 5000 euros.";
-const defaultWebsiteIntent = "Create a tool to submit this form";
+const presetCommand = "Prepare a vendor payment packet for all overdue invoices above EUR 5,000, but do not export bank details without approval.";
+const defaultWebsiteIntent = presetCommand;
 const fakeCompileDelayMs = 2000;
 
 type PendingApproval = {
@@ -49,7 +54,7 @@ export default function App() {
   const [schemas, setSchemas] = useState<ToolSchema[]>(() => loadCachedSchemas());
   const [selectedToolName, setSelectedToolName] = useState("queryOrders");
   const [command, setCommand] = useState(presetCommand);
-  const [websiteIntent, setWebsiteIntent] = useState("");
+  const [websiteIntent, setWebsiteIntent] = useState(defaultWebsiteIntent);
   const [toolParams, setToolParams] = useState<Record<string, string>>({});
   const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
@@ -59,6 +64,7 @@ export default function App() {
   const [paymentPacket, setPaymentPacket] = useState<PaymentPacket>();
   const [vendorAgentEvents, setVendorAgentEvents] = useState<VendorAgentEvent[]>([]);
   const [pendingBankInvoiceIds, setPendingBankInvoiceIds] = useState<string[]>();
+  const [compiledToolGroup, setCompiledToolGroup] = useState<CompiledToolGroup>();
   const [isLearning, setIsLearning] = useState(false);
   const [isLearningWebsite, setIsLearningWebsite] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -236,16 +242,33 @@ export default function App() {
     setIsLearningWebsite(true);
     setInspectionError(undefined);
     setCandidateTool(undefined);
+    setCompiledToolGroup(undefined);
 
     try {
       const summary = await collectActivePageSummary();
       setPageSummary(summary);
       addAgentMessage({ type: "compile_started", summary });
-      const pageSchemas = loadPageSchemas(summary);
-      setSchemas(pageSchemas);
       await sleep(fakeCompileDelayMs);
 
       const effectiveIntent = websiteIntent.trim() || defaultWebsiteIntent;
+      setCommand(effectiveIntent);
+      if (isVendorPaymentPage(summary)) {
+        const group = await compileToolGroupWithAgent({ prompt: effectiveIntent, pageSummary: summary });
+        setCompiledToolGroup(group);
+        setSchemas(group.tools);
+        setSelectedToolName(group.tools[0]?.name ?? "searchInvoices");
+        addAudit({
+          type: "learned_tool",
+          toolName: group.name,
+          risk: "read",
+          message: `Compiled ${group.name} by ${group.provider === "agent-api" ? "Agent API" : "local fallback"}`,
+          llmCalls: group.provider === "agent-api" ? 1 : 0,
+        });
+        return;
+      }
+
+      const pageSchemas = loadPageSchemas(summary);
+      setSchemas(pageSchemas);
       const candidate = compileWebsiteIntent(effectiveIntent, summary);
       setCandidateTool(candidate);
       setSelectedToolName(candidate.schema.name);
@@ -383,7 +406,7 @@ export default function App() {
   }
 
   async function handleRun() {
-    if (!isExtension && isVendorPaymentRequest(command)) {
+    if (isVendorPaymentRequest(command) && (!isExtension || compiledToolGroup)) {
       await runVendorPaymentWorkflow();
       return;
     }
@@ -676,33 +699,38 @@ export default function App() {
     }
   }
 
+  if (!isExtension) {
+    return (
+      <main className="erp-only-shell">
+        <DemoErp />
+      </main>
+    );
+  }
+
   return (
-    <main className={isExtension ? "extension-app-shell" : "app-shell"}>
-      {!isExtension && <DemoErp />}
-      <div className={isExtension ? "extension-panel-stack" : undefined}>
-        {isExtension && (
-          <ExtensionInspector
-            advancedOpen={advancedOpen}
-            agentMessages={agentMessages}
-            capturedSteps={capturedSteps}
-            candidateSchema={candidateTool?.schema}
-            candidateWarnings={candidateTool?.warnings ?? []}
-            error={inspectionError}
-            intent={websiteIntent}
-            isCapturing={isCapturing}
-            isExtension={isExtension}
-            isInspecting={isInspecting}
-            isLearningWebsite={isLearningWebsite}
-            summary={pageSummary}
-            onIntentChange={setWebsiteIntent}
-            onInspect={handleInspectActivePage}
-            onLearnWebsite={handleLearnWebsite}
-            onSaveSchema={handleSaveGeneratedSchema}
-            onStartCapture={handleStartCapture}
-            onStopCapture={handleStopCapture}
-            onToggleAdvanced={() => setAdvancedOpen((current) => !current)}
-          />
-        )}
+    <main className="extension-app-shell">
+      <div className="extension-panel-stack">
+        <ExtensionInspector
+          advancedOpen={advancedOpen}
+          agentMessages={agentMessages}
+          capturedSteps={capturedSteps}
+          candidateSchema={candidateTool?.schema}
+          candidateWarnings={candidateTool?.warnings ?? []}
+          error={inspectionError}
+          intent={websiteIntent}
+          isCapturing={isCapturing}
+          isExtension={isExtension}
+          isInspecting={isInspecting}
+          isLearningWebsite={isLearningWebsite}
+          summary={pageSummary}
+          onIntentChange={setWebsiteIntent}
+          onInspect={handleInspectActivePage}
+          onLearnWebsite={handleLearnWebsite}
+          onSaveSchema={handleSaveGeneratedSchema}
+          onStartCapture={handleStartCapture}
+          onStopCapture={handleStopCapture}
+          onToggleAdvanced={() => setAdvancedOpen((current) => !current)}
+        />
         <GraftPanel
           agentMessages={agentMessages}
           auditEvents={auditEvents}
@@ -717,6 +745,7 @@ export default function App() {
           schemas={schemas}
           selectedSchema={selectedSchema}
           toolParams={toolParams}
+          compiledToolGroup={compiledToolGroup}
           vendorAgentEvents={vendorAgentEvents}
           onAllow={handleAllow}
           onCommandChange={setCommand}

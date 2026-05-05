@@ -32,6 +32,11 @@ button {
   min-height: 100vh;
 }
 
+.erp-only-shell,
+.erp-only-shell .erp-shell {
+  min-height: 100vh;
+}
+
 .extension-app-shell {
   min-width: 360px;
   min-height: 100vh;
@@ -727,6 +732,32 @@ textarea {
   color: #233241;
   font-size: 13px;
   font-weight: 700;
+}
+
+.compiled-workflow-card {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  border: 1px solid #b7d8e1;
+  border-radius: 8px;
+  background: #eef9fb;
+  padding: 12px;
+}
+
+.compiled-workflow-card strong {
+  color: #142536;
+  font-size: 14px;
+}
+
+.compiled-workflow-card span {
+  color: #445566;
+  font-size: 13px;
+}
+
+.compiled-workflow-card small {
+  color: #607080;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .payment-packet {

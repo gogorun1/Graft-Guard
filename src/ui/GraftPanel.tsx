@@ -4,6 +4,7 @@ import { SchemaViewer } from "./SchemaViewer";
 import { schemaSignature } from "../graft/schemaCompiler";
 import type { AgentMessage as AgentMessageModel } from "../graft/agentNarrator";
 import type { AuditEvent } from "../graft/auditLog";
+import type { CompiledToolGroup } from "../graft/agentCompiler";
 import type { ReplayResult, ReplayTrace, ToolSchema } from "../graft/schemaTypes";
 import type { PaymentPacket, VendorAgentEvent } from "../graft/vendorPaymentAgent";
 import { AgentMessageStream } from "./AgentMessageStream";
@@ -17,6 +18,7 @@ type Props = {
   agentMessages: AgentMessageModel[];
   auditEvents: AuditEvent[];
   command: string;
+  compiledToolGroup?: CompiledToolGroup;
   isExtension: boolean;
   isLearning: boolean;
   isRunning: boolean;
@@ -43,6 +45,7 @@ export function GraftPanel({
   agentMessages,
   auditEvents,
   command,
+  compiledToolGroup,
   isExtension,
   isLearning,
   isRunning,
@@ -88,7 +91,7 @@ export function GraftPanel({
         </section>
       )}
 
-      {!isExtension && vendorAgentEvents.length > 0 && (
+      {vendorAgentEvents.length > 0 && (
         <section className="panel-section">
           <div className="section-heading">
             <h3>Agent workflow</h3>
@@ -106,6 +109,30 @@ export function GraftPanel({
       )}
 
       {!isExtension && <AgentMessageStream messages={agentMessages} />}
+
+      {compiledToolGroup && (
+        <section className="panel-section">
+          <div className="section-heading">
+            <h3>Compiled workflow</h3>
+            <span>{compiledToolGroup.provider === "agent-api" ? "Agent API" : "local fallback"}</span>
+          </div>
+          <div className="compiled-workflow-card">
+            <strong>{compiledToolGroup.name}</strong>
+            <span>{compiledToolGroup.description}</span>
+            <small>{compiledToolGroup.tools.length} typed tools · {compiledToolGroup.workflowPlan.length} planned steps</small>
+          </div>
+          {isExtension && (
+            <button
+              type="button"
+              className="primary-button full-width"
+              onClick={onRun}
+              disabled={isRunning || schemas.length === 0}
+            >
+              {isRunning ? "Running..." : "Run workflow"}
+            </button>
+          )}
+        </section>
+      )}
 
       <section className="panel-section">
         <div className="section-heading">
@@ -135,7 +162,7 @@ export function GraftPanel({
         </div>
       </section>
 
-      {(!isExtension || selectedSchema) && (
+      {(!isExtension || (selectedSchema && !compiledToolGroup)) && (
         <section className="panel-section">
           <div className="section-heading">
             <h3>Schema</h3>
@@ -145,7 +172,7 @@ export function GraftPanel({
         </section>
       )}
 
-      {selectedSchema && (
+      {selectedSchema && (!isExtension || !compiledToolGroup) && (
         <section className="panel-section">
           <div className="section-heading">
             <h3>Tool inputs</h3>
@@ -211,7 +238,7 @@ export function GraftPanel({
         <ApprovalCard schema={pendingApproval.schema} onAllow={onAllow} onDeny={onDeny} />
       )}
 
-      {!isExtension && paymentPacket && (
+      {paymentPacket && (
         <section className="panel-section">
           <div className="section-heading">
             <h3>Payment packet</h3>

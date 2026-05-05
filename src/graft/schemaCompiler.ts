@@ -115,7 +115,7 @@ const exportBankDetailsSchema: ToolSchema = {
   replayPlan: [{ type: "click", selector: "#export-bank-details" }],
 };
 
-const vendorPaymentSchemas = [
+export const vendorPaymentSchemas = [
   searchInvoicesSchema,
   openInvoiceSchema,
   extractPaymentPacketSchema,
