@@ -272,6 +272,10 @@ button {
   padding: 10px;
 }
 
+.agent-stream-collapsed {
+  padding-bottom: 8px;
+}
+
 .extension-inspector .agent-stream {
   margin: 0 0 12px;
 }
@@ -301,8 +305,14 @@ button {
 .agent-stream-list {
   display: grid;
   gap: 7px;
-  max-height: 260px;
+}
+
+.agent-history-list {
+  display: grid;
+  gap: 6px;
+  max-height: 190px;
   overflow-y: auto;
+  padding-top: 2px;
 }
 
 .agent-message {
@@ -313,6 +323,29 @@ button {
   border-radius: 7px;
   background: #ffffff;
   padding: 8px;
+}
+
+.agent-message-compact {
+  grid-template-columns: 22px minmax(0, 1fr);
+  opacity: 0.82;
+  padding: 6px;
+}
+
+.agent-message-compact .agent-message-icon {
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+}
+
+.agent-message-compact .agent-message-meta {
+  margin-bottom: 1px;
+  font-size: 9px;
+}
+
+.agent-message-compact p {
+  font-size: 11px;
+  font-weight: 700;
+  -webkit-line-clamp: 1;
 }
 
 .agent-message-compile {

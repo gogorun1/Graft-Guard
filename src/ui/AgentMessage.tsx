@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { AgentMessage as AgentMessageModel } from "../graft/agentNarrator";
 
 type Props = {
+  compact?: boolean;
   message: AgentMessageModel;
 };
 
@@ -15,12 +16,12 @@ const iconLabels: Record<AgentMessageModel["icon"], string> = {
   error: "❌",
 };
 
-export function AgentMessage({ message }: Props) {
+export function AgentMessage({ compact = false, message }: Props) {
   const [expanded, setExpanded] = useState(false);
-  const hasDetail = Boolean(message.detail);
+  const hasDetail = Boolean(message.detail) && !compact;
 
   return (
-    <article className={`agent-message agent-message-${message.phase}`}>
+    <article className={`agent-message agent-message-${message.phase} ${compact ? "agent-message-compact" : ""}`}>
       <div className="agent-message-icon" aria-hidden="true">
         {iconLabels[message.icon]}
       </div>
@@ -35,7 +36,7 @@ export function AgentMessage({ message }: Props) {
             {expanded ? "Hide detail" : "Show detail"}
           </button>
         )}
-        {expanded && message.detail && <div className="agent-message-detail">{message.detail}</div>}
+        {!compact && expanded && message.detail && <div className="agent-message-detail">{message.detail}</div>}
       </div>
     </article>
   );
