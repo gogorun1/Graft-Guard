@@ -47,9 +47,8 @@ export function ExtensionInspector({
   onStopCapture,
   onToggleAdvanced,
 }: Props) {
-  const [customToolOpen, setCustomToolOpen] = useState(false);
   const hasWarnings = candidateWarnings.length > 0;
-  const showCustomTool = isCapturing || customToolOpen || hasWarnings || Boolean(error);
+  const showCustomTool = isCapturing || hasWarnings || Boolean(error);
   const compileStatus = isLearningWebsite ? "compiling" : candidateSchema ? "compiled" : "idle";
   const latestMessage = agentMessages[0]?.text;
   const compileStatusText =
@@ -130,17 +129,6 @@ export function ExtensionInspector({
 
       {error && <div className="error-state">{error}</div>}
 
-      {!isCapturing && (
-        <button
-          type="button"
-          className="custom-tool-toggle"
-          onClick={() => setCustomToolOpen((current) => !current)}
-          aria-expanded={showCustomTool}
-        >
-          {showCustomTool ? "Hide customized tool" : "Customized tool"}
-        </button>
-      )}
-
       {showCustomTool && (
         <div className="custom-tool-card">
           <div>
@@ -169,13 +157,13 @@ export function ExtensionInspector({
         onClick={onToggleAdvanced}
         aria-expanded={advancedOpen}
       >
-        {advancedOpen ? "Hide advanced" : "Advanced"}
+        {advancedOpen ? "Hide diagnostics" : "Diagnostics"}
       </button>
 
       {advancedOpen && (
         <div className="advanced-card page-summary">
           <div className="section-heading">
-            <h3>Advanced context</h3>
+            <h3>Diagnostics</h3>
             <button type="button" className="text-button" onClick={onInspect} disabled={!isExtension || isInspecting}>
               {isInspecting ? "Inspecting..." : "Refresh inspect"}
             </button>
