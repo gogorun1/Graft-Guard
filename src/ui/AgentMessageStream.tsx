@@ -22,7 +22,7 @@ export function AgentMessageStream({ messages }: Props) {
   return (
     <section className={`agent-stream ${historyOpen ? "agent-stream-expanded" : "agent-stream-collapsed"}`} aria-label="Agent activity">
       <div className="agent-stream-heading">
-        <span>Agent presence</span>
+        <span>{latestMessage.phase === "compile" ? "Agent thinking" : latestMessage.phase === "replay" ? "Agent replaying" : "Agent"}</span>
         {earlierMessages.length > 0 && (
           <button type="button" className="agent-earlier-button" onClick={() => setHistoryOpen((current) => !current)}>
             {historyOpen ? "Collapse" : `History ${earlierMessages.length}`}

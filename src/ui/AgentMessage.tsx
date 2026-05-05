@@ -28,6 +28,13 @@ export function AgentMessage({ compact = false, message }: Props) {
       <div className="agent-message-body">
         <div className="agent-message-meta">
           <span>{message.phase === "replay" ? "Local replay" : message.phase === "compile" ? "AI-assisted" : "Agent"}</span>
+          {message.phase === "compile" && !compact && (
+            <span className="agent-thinking-dots" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+          )}
           <time>{new Date(message.timestamp).toLocaleTimeString()}</time>
         </div>
         <p>{message.text}</p>

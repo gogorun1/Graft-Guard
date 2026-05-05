@@ -31,6 +31,7 @@ import { GraftPanel } from "./ui/GraftPanel";
 import { ExtensionInspector } from "./ui/ExtensionInspector";
 
 const presetCommand = "Find all orders from last month over 1000 euros";
+const fakeCompileDelayMs = 2000;
 
 type PendingApproval = {
   schema: ToolSchema;
@@ -225,6 +226,7 @@ export default function App() {
       addAgentMessage({ type: "compile_started", summary });
       const pageSchemas = loadPageSchemas(summary);
       setSchemas(pageSchemas);
+      await sleep(fakeCompileDelayMs);
 
       const candidate = compileWebsiteIntent(websiteIntent, summary);
       setCandidateTool(candidate);
@@ -659,4 +661,8 @@ function defaultParamValue(property: unknown): string {
   }
 
   return "";
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
