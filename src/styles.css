@@ -505,10 +505,56 @@ textarea {
   margin-top: 10px;
 }
 
+.intent-field {
+  display: grid;
+  gap: 6px;
+  color: #344354;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.intent-field textarea {
+  min-height: 70px;
+}
+
+.fallback-row,
 .extension-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+  margin-top: 8px;
+}
+
+.learned-page-chip {
+  display: grid;
+  gap: 2px;
+  margin-top: 10px;
+  border: 1px solid #d8e3ea;
+  border-radius: 6px;
+  background: #f5f9fb;
+  padding: 9px;
+}
+
+.learned-page-chip strong {
+  overflow: hidden;
+  color: #172b3e;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.learned-page-chip span {
+  color: #667585;
+  font-size: 12px;
+}
+
+.text-button {
+  border: 0;
+  background: transparent;
+  color: #126b82;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0;
 }
 
 .active-capture {

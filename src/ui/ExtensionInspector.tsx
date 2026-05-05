@@ -3,56 +3,80 @@ import { schemaSignature } from "../graft/schemaCompiler";
 import type { ToolSchema } from "../graft/schemaTypes";
 
 type Props = {
+  advancedOpen: boolean;
   capturedSteps: CapturedStep[];
   candidateSchema?: ToolSchema;
   candidateWarnings: string[];
   error?: string;
+  intent: string;
   isCapturing: boolean;
   isExtension: boolean;
   isInspecting: boolean;
+  isLearningWebsite: boolean;
   summary?: PageDomSummary;
-  onGenerateSchema: () => void;
+  onIntentChange: (value: string) => void;
   onInspect: () => void;
+  onLearnWebsite: () => void;
   onSaveSchema: () => void;
   onStartCapture: () => void;
   onStopCapture: () => void;
+  onToggleAdvanced: () => void;
 };
 
 export function ExtensionInspector({
+  advancedOpen,
   capturedSteps,
   candidateSchema,
   candidateWarnings,
   error,
+  intent,
   isCapturing,
   isExtension,
   isInspecting,
+  isLearningWebsite,
   summary,
-  onGenerateSchema,
+  onIntentChange,
   onInspect,
+  onLearnWebsite,
   onSaveSchema,
   onStartCapture,
   onStopCapture,
+  onToggleAdvanced,
 }: Props) {
   return (
-    <section className="extension-inspector" aria-label="Active page inspector">
+    <section className="extension-inspector" aria-label="Learn website">
       <div className="section-heading">
-        <h3>Active page</h3>
-        <span>{isExtension ? "extension bridge" : "standalone demo"}</span>
+        <h3>Learn website</h3>
+        <span>{isExtension ? "AI-assisted compile" : "standalone demo"}</span>
       </div>
 
-      <div className="extension-actions">
-        <button type="button" className="primary-button" onClick={onInspect} disabled={!isExtension || isInspecting}>
-          {isInspecting ? "Inspecting..." : "Inspect active page"}
-        </button>
+      <label className="intent-field">
+        Describe what you want to automate
+        <textarea value={intent} onChange={(event) => onIntentChange(event.target.value)} />
+      </label>
+
+      <button
+        type="button"
+        className="primary-button full-width"
+        onClick={onLearnWebsite}
+        disabled={!isExtension || isLearningWebsite}
+      >
+        {isLearningWebsite ? "Learning..." : "Learn website"}
+      </button>
+
+      <div className="fallback-row">
         {!isCapturing ? (
           <button type="button" className="secondary-button" onClick={onStartCapture} disabled={!isExtension}>
-            Start capture
+            Show me once
           </button>
         ) : (
           <button type="button" className="secondary-button active-capture" onClick={onStopCapture}>
-            Stop capture
+            Stop and suggest tool
           </button>
         )}
+        <button type="button" className="secondary-button" onClick={onToggleAdvanced}>
+          {advancedOpen ? "Hide advanced" : "Advanced"}
+        </button>
       </div>
 
       {!isExtension && (
@@ -64,74 +88,16 @@ export function ExtensionInspector({
       {error && <div className="error-state">{error}</div>}
 
       {summary && (
-        <div className="page-summary">
-          <div className="page-summary-title">
-            <strong>{summary.title}</strong>
-            <span>{summary.origin}</span>
-          </div>
-
-          <dl>
-            <div>
-              <dt>Fingerprint</dt>
-              <dd>{summary.fingerprint}</dd>
-            </div>
-            <div>
-              <dt>Forms</dt>
-              <dd>{summary.forms.length}</dd>
-            </div>
-            <div>
-              <dt>Inputs</dt>
-              <dd>{summary.inputs.length}</dd>
-            </div>
-            <div>
-              <dt>Buttons</dt>
-              <dd>{summary.buttons.length}</dd>
-            </div>
-            <div>
-              <dt>Tables</dt>
-              <dd>{summary.tables.length}</dd>
-            </div>
-          </dl>
-
-          <SummaryList title="Inputs" items={summary.inputs.map((input) => input.label || input.name || input.selector)} />
-          <SummaryList title="Buttons" items={summary.buttons.map((button) => button.text || button.selector)} />
-          <SummaryList title="Tables" items={summary.tables.map((table) => table.headers.join(", ") || table.selector)} />
-        </div>
-      )}
-
-      {capturedSteps.length > 0 && (
-        <div className="capture-summary">
-          <div className="section-heading">
-            <h3>Captured workflow</h3>
-            <span>{capturedSteps.length} steps</span>
-          </div>
-          <ol>
-            {capturedSteps.map((step, index) => (
-              <li key={`${step.type}-${step.selector}-${index}`}>
-                {step.type === "setValue" ? (
-                  <>
-                    <strong>Set</strong> {step.label || step.selector}
-                    <small>{step.valuePreview || "(empty)"}</small>
-                  </>
-                ) : (
-                  <>
-                    <strong>Click</strong> {step.label || step.selector}
-                    <small>{step.selector}</small>
-                  </>
-                )}
-              </li>
-            ))}
-          </ol>
-          <button type="button" className="primary-button full-width" onClick={onGenerateSchema}>
-            Generate schema
-          </button>
+        <div className="learned-page-chip">
+          <strong>{summary.title}</strong>
+          <span>{summary.origin}</span>
         </div>
       )}
 
       {candidateSchema && (
         <div className="candidate-schema">
           <div className="section-heading">
-            <h3>Candidate schema</h3>
+            <h3>Suggested tool</h3>
             <span>{candidateSchema.risk}</span>
           </div>
           <code>{schemaSignature(candidateSchema)}</code>
@@ -145,6 +111,78 @@ export function ExtensionInspector({
           <button type="button" className="primary-button full-width" onClick={onSaveSchema}>
             Save tool
           </button>
+        </div>
+      )}
+
+      {advancedOpen && (
+        <div className="page-summary">
+          <div className="section-heading">
+            <h3>Advanced context</h3>
+            <button type="button" className="text-button" onClick={onInspect} disabled={!isExtension || isInspecting}>
+              {isInspecting ? "Inspecting..." : "Refresh inspect"}
+            </button>
+          </div>
+          <div className="page-summary-title">
+            <strong>{summary?.title ?? "No page inspected yet"}</strong>
+            <span>{summary?.origin ?? "Click Learn website or Refresh inspect"}</span>
+          </div>
+
+          {summary && (
+            <>
+              <dl>
+                <div>
+                  <dt>Fingerprint</dt>
+                  <dd>{summary.fingerprint}</dd>
+                </div>
+                <div>
+                  <dt>Forms</dt>
+                  <dd>{summary.forms.length}</dd>
+                </div>
+                <div>
+                  <dt>Inputs</dt>
+                  <dd>{summary.inputs.length}</dd>
+                </div>
+                <div>
+                  <dt>Buttons</dt>
+                  <dd>{summary.buttons.length}</dd>
+                </div>
+                <div>
+                  <dt>Tables</dt>
+                  <dd>{summary.tables.length}</dd>
+                </div>
+              </dl>
+
+              <SummaryList title="Inputs" items={summary.inputs.map((input) => input.label || input.name || input.selector)} />
+              <SummaryList title="Buttons" items={summary.buttons.map((button) => button.text || button.selector)} />
+              <SummaryList title="Tables" items={summary.tables.map((table) => table.headers.join(", ") || table.selector)} />
+            </>
+          )}
+
+          {capturedSteps.length > 0 && (
+            <div className="capture-summary">
+              <div className="section-heading">
+                <h3>Captured workflow</h3>
+                <span>{capturedSteps.length} steps</span>
+              </div>
+              <ol>
+                {capturedSteps.map((step, index) => (
+                  <li key={`${step.type}-${step.selector}-${index}`}>
+                    {step.type === "setValue" ? (
+                      <>
+                        <strong>Set</strong> {step.label || step.selector}
+                        <small>{step.valuePreview || "(empty)"}</small>
+                      </>
+                    ) : (
+                      <>
+                        <strong>Click</strong> {step.label || step.selector}
+                        <small>{step.selector}</small>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
         </div>
       )}
     </section>

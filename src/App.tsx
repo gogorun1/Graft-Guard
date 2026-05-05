@@ -15,6 +15,7 @@ import {
   savePageSchema,
   type CandidateTool,
 } from "./graft/capturedWorkflowCompiler";
+import { compileWebsiteIntent } from "./graft/websiteIntentCompiler";
 import { activeParserLabel, parseNaturalLanguageCommand } from "./graft/commandParser";
 import { compileApp, loadCachedSchemas } from "./graft/schemaCompiler";
 import { replayTool } from "./graft/replayEngine";
@@ -34,14 +35,17 @@ export default function App() {
   const [schemas, setSchemas] = useState<ToolSchema[]>(() => loadCachedSchemas());
   const [selectedToolName, setSelectedToolName] = useState("queryOrders");
   const [command, setCommand] = useState(presetCommand);
+  const [websiteIntent, setWebsiteIntent] = useState("Create a tool to submit this form");
   const [toolParams, setToolParams] = useState<Record<string, string>>({});
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval>();
   const [replayTrace, setReplayTrace] = useState<ReplayTrace[]>([]);
   const [replayResult, setReplayResult] = useState<ReplayResult>();
   const [isLearning, setIsLearning] = useState(false);
+  const [isLearningWebsite, setIsLearningWebsite] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isInspecting, setIsInspecting] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [pageSummary, setPageSummary] = useState<PageDomSummary>();
   const [capturedSteps, setCapturedSteps] = useState<CapturedStep[]>([]);
   const [candidateTool, setCandidateTool] = useState<CandidateTool>();
@@ -144,6 +148,40 @@ export default function App() {
     }
   }
 
+  async function handleLearnWebsite() {
+    setIsLearningWebsite(true);
+    setInspectionError(undefined);
+    setCandidateTool(undefined);
+
+    try {
+      const summary = await collectActivePageSummary();
+      setPageSummary(summary);
+      const pageSchemas = loadPageSchemas(summary);
+      setSchemas(pageSchemas);
+
+      const candidate = compileWebsiteIntent(websiteIntent, summary);
+      setCandidateTool(candidate);
+      setSelectedToolName(candidate.schema.name);
+      addAudit({
+        type: "learned_tool",
+        toolName: candidate.schema.name,
+        risk: candidate.schema.risk,
+        message: `Suggested ${candidate.schema.name} from website intent`,
+        llmCalls: 0,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Website learning failed";
+      setInspectionError(message);
+      addAudit({
+        type: "replay_failed",
+        message,
+        llmCalls: 0,
+      });
+    } finally {
+      setIsLearningWebsite(false);
+    }
+  }
+
   async function handleStartCapture() {
     setInspectionError(undefined);
     setCapturedSteps([]);
@@ -174,11 +212,19 @@ export default function App() {
     try {
       const steps = await stopActivePageCapture();
       setCapturedSteps(steps);
-      setCandidateTool(undefined);
+      const summary = pageSummary ?? (await collectActivePageSummary().catch(() => undefined));
+      if (summary) {
+        setPageSummary(summary);
+      }
+      const candidate = compileCapturedWorkflow(steps, summary);
+      setCandidateTool(candidate);
+      setSelectedToolName(candidate.schema.name);
       setIsCapturing(false);
       addAudit({
         type: "replay_completed",
-        message: `Workflow capture stopped with ${steps.length} steps`,
+        toolName: candidate.schema.name,
+        risk: candidate.schema.risk,
+        message: `Suggested ${candidate.schema.name} from demonstrated workflow`,
         llmCalls: 0,
       });
     } catch (error) {
@@ -407,19 +453,24 @@ export default function App() {
       <div className={isExtension ? "extension-panel-stack" : undefined}>
         {isExtension && (
           <ExtensionInspector
+            advancedOpen={advancedOpen}
             capturedSteps={capturedSteps}
             candidateSchema={candidateTool?.schema}
             candidateWarnings={candidateTool?.warnings ?? []}
             error={inspectionError}
+            intent={websiteIntent}
             isCapturing={isCapturing}
             isExtension={isExtension}
             isInspecting={isInspecting}
+            isLearningWebsite={isLearningWebsite}
             summary={pageSummary}
-            onGenerateSchema={handleGenerateSchema}
+            onIntentChange={setWebsiteIntent}
             onInspect={handleInspectActivePage}
+            onLearnWebsite={handleLearnWebsite}
             onSaveSchema={handleSaveGeneratedSchema}
             onStartCapture={handleStartCapture}
             onStopCapture={handleStopCapture}
+            onToggleAdvanced={() => setAdvancedOpen((current) => !current)}
           />
         )}
         <GraftPanel
