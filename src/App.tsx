@@ -27,10 +27,16 @@ import { compileApp, loadCachedSchemas } from "./graft/schemaCompiler";
 import { replayTool } from "./graft/replayEngine";
 import type { ReplayResult, ReplayTrace, ToolSchema } from "./graft/schemaTypes";
 import { requiresApproval } from "./graft/guardEngine";
+import {
+  finishVendorPaymentWorkflow,
+  startVendorPaymentWorkflow,
+  type PaymentPacket,
+  type VendorAgentEvent,
+} from "./graft/vendorPaymentAgent";
 import { GraftPanel } from "./ui/GraftPanel";
 import { ExtensionInspector } from "./ui/ExtensionInspector";
 
-const presetCommand = "Find all orders from last month over 1000 euros";
+const presetCommand = "Prepare payment packet for overdue invoices above 5000 euros.";
 const defaultWebsiteIntent = "Create a tool to submit this form";
 const fakeCompileDelayMs = 2000;
 
@@ -50,6 +56,9 @@ export default function App() {
   const [pendingApproval, setPendingApproval] = useState<PendingApproval>();
   const [replayTrace, setReplayTrace] = useState<ReplayTrace[]>([]);
   const [replayResult, setReplayResult] = useState<ReplayResult>();
+  const [paymentPacket, setPaymentPacket] = useState<PaymentPacket>();
+  const [vendorAgentEvents, setVendorAgentEvents] = useState<VendorAgentEvent[]>([]);
+  const [pendingBankInvoiceIds, setPendingBankInvoiceIds] = useState<string[]>();
   const [isLearning, setIsLearning] = useState(false);
   const [isLearningWebsite, setIsLearningWebsite] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -151,11 +160,18 @@ export default function App() {
           "#search-orders",
           "#export-csv",
           "#orders-table",
+          "#nav-invoices",
+          "#invoice-status",
+          "#invoice-min-amount",
+          "#search-invoices",
+          "#export-bank-details",
+          "#invoices-table",
+          "#invoice-detail",
         ],
       });
 
       setSchemas(compiled);
-      setSelectedToolName("queryOrders");
+      setSelectedToolName("searchInvoices");
       addAgentMessage({
         type: "compile_succeeded",
         schema: compiled[0],
@@ -164,9 +180,9 @@ export default function App() {
       });
       addAudit({
         type: "learned_tool",
-        toolName: "queryOrders",
+        toolName: "searchInvoices",
         risk: "read",
-        message: "Compiled queryOrders from Acme ERP",
+        message: "Compiled vendor payment tool group from Acme ERP",
         llmCalls: 1,
       });
       addAudit({
@@ -367,6 +383,11 @@ export default function App() {
   }
 
   async function handleRun() {
+    if (!isExtension && isVendorPaymentRequest(command)) {
+      await runVendorPaymentWorkflow();
+      return;
+    }
+
     setIsRunning(true);
     try {
       const invocation = await parseNaturalLanguageCommand(command);
@@ -458,6 +479,27 @@ export default function App() {
 
     const { schema, params } = pendingApproval;
     setPendingApproval(undefined);
+
+    if (schema.name === "exportBankDetails" && pendingBankInvoiceIds) {
+      const run = finishVendorPaymentWorkflow(pendingBankInvoiceIds, true);
+      setVendorAgentEvents((current) => [...current, ...run.events]);
+      if (run.packet) {
+        setPaymentPacket(run.packet);
+      }
+      setPendingBankInvoiceIds(undefined);
+      for (const event of run.events) {
+        addAudit({
+          type: "replay_completed",
+          toolName: schema.name,
+          params,
+          risk: schema.risk,
+          message: event.message,
+          llmCalls: 0,
+        });
+      }
+      return;
+    }
+
     addAudit({
       type: "approval_allowed",
       toolName: schema.name,
@@ -475,6 +517,26 @@ export default function App() {
       return;
     }
 
+    if (pendingApproval.schema.name === "exportBankDetails" && pendingBankInvoiceIds) {
+      const run = finishVendorPaymentWorkflow(pendingBankInvoiceIds, false);
+      setVendorAgentEvents((current) => [...current, ...run.events]);
+      if (run.packet) {
+        setPaymentPacket(run.packet);
+      }
+      for (const event of run.events) {
+        addAudit({
+          type: event.type === "packet_generated" ? "replay_completed" : "approval_denied",
+          toolName: "exportBankDetails",
+          risk: "export",
+          message: event.message,
+          llmCalls: 0,
+        });
+      }
+      setPendingBankInvoiceIds(undefined);
+      setPendingApproval(undefined);
+      return;
+    }
+
     addAudit({
       type: "approval_denied",
       toolName: pendingApproval.schema.name,
@@ -484,6 +546,57 @@ export default function App() {
       llmCalls: 0,
     });
     setPendingApproval(undefined);
+  }
+
+  async function runVendorPaymentWorkflow() {
+    setIsRunning(true);
+    setReplayTrace([]);
+    setReplayResult(undefined);
+    setPaymentPacket(undefined);
+    setVendorAgentEvents([]);
+    setPendingBankInvoiceIds(undefined);
+
+    try {
+      const run = startVendorPaymentWorkflow(command);
+      setVendorAgentEvents(run.events);
+
+      for (const event of run.events) {
+        addAudit({
+          type: event.type === "guard_required" ? "approval_requested" : "replay_step",
+          toolName: toolNameForVendorEvent(event),
+          risk: event.type === "guard_required" ? "export" : "read",
+          message: event.message,
+          llmCalls: 0,
+        });
+      }
+
+      if (run.guardInvoiceIds) {
+        const schema = schemas.find((tool) => tool.name === "exportBankDetails") ?? {
+          name: "exportBankDetails",
+          description: "Export vendor bank/account data for selected invoices",
+          risk: "export" as const,
+          inputSchema: {
+            type: "object" as const,
+            properties: {
+              invoiceIds: { type: "string", title: "Invoice IDs" },
+            },
+            required: ["invoiceIds"],
+          },
+          replayPlan: [{ type: "click" as const, selector: "#export-bank-details" }],
+        };
+        const params = { invoiceIds: run.guardInvoiceIds.join(",") };
+        setPendingBankInvoiceIds(run.guardInvoiceIds);
+        setPendingApproval({ schema, params });
+      }
+    } catch (error) {
+      addAudit({
+        type: "replay_failed",
+        message: error instanceof Error ? error.message : "Vendor payment workflow failed",
+        llmCalls: 0,
+      });
+    } finally {
+      setIsRunning(false);
+    }
   }
 
   async function executeReplay(schema: ToolSchema, params: Record<string, unknown>) {
@@ -598,11 +711,13 @@ export default function App() {
           isLearning={isLearning}
           isRunning={isRunning}
           pendingApproval={pendingApproval}
+          paymentPacket={paymentPacket}
           replayResult={replayResult}
           replayTrace={replayTrace}
           schemas={schemas}
           selectedSchema={selectedSchema}
           toolParams={toolParams}
+          vendorAgentEvents={vendorAgentEvents}
           onAllow={handleAllow}
           onCommandChange={setCommand}
           onDeny={handleDeny}
@@ -667,4 +782,13 @@ function defaultParamValue(property: unknown): string {
 
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function isVendorPaymentRequest(command: string): boolean {
+  const normalized = command.toLowerCase();
+  return normalized.includes("payment packet") || normalized.includes("overdue invoice");
+}
+
+function toolNameForVendorEvent(event: VendorAgentEvent): string {
+  return "tool" in event ? event.tool : "extractPaymentPacket";
 }

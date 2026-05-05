@@ -18,6 +18,10 @@ export function riskLabel(risk: RiskLevel): string {
 }
 
 export function approvalDescription(schema: ToolSchema): string {
+  if (schema.name === "exportBankDetails") {
+    return "This will expose vendor bank/account data for the selected invoices.";
+  }
+
   if (schema.risk === "export") {
     return "This may download or expose data from the current page.";
   }

@@ -701,6 +701,86 @@ textarea {
   flex: 1;
 }
 
+.agent-workflow-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-workflow-list li {
+  display: grid;
+  gap: 2px;
+  border-left: 3px solid #126b82;
+  background: #f7fafc;
+  padding: 8px 10px;
+}
+
+.agent-workflow-list strong {
+  color: #607080;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.agent-workflow-list span {
+  color: #233241;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.payment-packet {
+  display: grid;
+  gap: 12px;
+}
+
+.packet-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.packet-summary-grid span {
+  display: grid;
+  gap: 2px;
+  border: 1px solid #d7dde3;
+  border-radius: 6px;
+  background: #f6f8fa;
+  color: #607080;
+  padding: 9px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.packet-summary-grid strong {
+  color: #142536;
+  font-size: 15px;
+  text-transform: none;
+}
+
+.payment-packet table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #d7dde3;
+  background: #ffffff;
+  font-size: 12px;
+}
+
+.payment-packet th,
+.payment-packet td {
+  border-bottom: 1px solid #e2e6ea;
+  padding: 7px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.payment-packet th {
+  color: #526273;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
 .audit-timeline {
   display: grid;
   gap: 8px;

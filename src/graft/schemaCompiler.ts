@@ -53,10 +53,79 @@ const exportCsvSchema: ToolSchema = {
   replayPlan: [{ type: "click", selector: "#export-csv" }],
 };
 
-const hardcodedSchemas = [queryOrdersSchema, exportCsvSchema];
+const searchInvoicesSchema: ToolSchema = {
+  name: "searchInvoices",
+  description: "Search overdue vendor invoices by minimum amount",
+  risk: "read",
+  inputSchema: {
+    type: "object",
+    properties: {
+      status: { type: "string", title: "Status", default: "overdue" },
+      minAmount: { type: "number", title: "Minimum amount", default: 5000, minimum: 0, step: 100 },
+    },
+    required: ["status", "minAmount"],
+  },
+  replayPlan: [
+    { type: "click", selector: "#nav-invoices" },
+    { type: "setValue", selector: "#invoice-min-amount", valueFrom: "minAmount" },
+    { type: "click", selector: "#search-invoices" },
+    { type: "extractTable", selector: "#invoices-table" },
+  ],
+};
+
+const openInvoiceSchema: ToolSchema = {
+  name: "openInvoice",
+  description: "Open a vendor invoice detail without exporting bank details",
+  risk: "read",
+  inputSchema: {
+    type: "object",
+    properties: {
+      invoiceId: { type: "string", title: "Invoice ID", default: "INV-24017" },
+    },
+    required: ["invoiceId"],
+  },
+  replayPlan: [{ type: "click", selector: "#invoice-detail" }],
+};
+
+const extractPaymentPacketSchema: ToolSchema = {
+  name: "extractPaymentPacket",
+  description: "Generate a vendor payment packet summary from invoice details",
+  risk: "read",
+  inputSchema: {
+    type: "object",
+    properties: {
+      invoiceIds: { type: "string", title: "Invoice IDs", default: "INV-24017,INV-24031,INV-24038,INV-24044" },
+    },
+    required: ["invoiceIds"],
+  },
+  replayPlan: [{ type: "extractTable", selector: "#invoices-table" }],
+};
+
+const exportBankDetailsSchema: ToolSchema = {
+  name: "exportBankDetails",
+  description: "Export vendor bank/account data for selected invoices",
+  risk: "export",
+  inputSchema: {
+    type: "object",
+    properties: {
+      invoiceIds: { type: "string", title: "Invoice IDs", default: "INV-24017,INV-24031,INV-24038,INV-24044" },
+    },
+    required: ["invoiceIds"],
+  },
+  replayPlan: [{ type: "click", selector: "#export-bank-details" }],
+};
+
+const vendorPaymentSchemas = [
+  searchInvoicesSchema,
+  openInvoiceSchema,
+  extractPaymentPacketSchema,
+  exportBankDetailsSchema,
+];
+
+const hardcodedSchemas = [...vendorPaymentSchemas, queryOrdersSchema, exportCsvSchema];
 
 export async function compileApp(domSummary: DomSummary): Promise<ToolSchema[]> {
-  if (!domSummary.stableIds.includes("#orders-table")) {
+  if (!domSummary.stableIds.includes("#invoices-table") && !domSummary.stableIds.includes("#orders-table")) {
     throw new Error("Acme ERP table was not found in the DOM summary.");
   }
 
@@ -92,6 +161,22 @@ export function schemaSignature(schema: ToolSchema): string {
 
   if (schema.name === "exportCsv") {
     return "exportCsv(): CsvFile";
+  }
+
+  if (schema.name === "searchInvoices") {
+    return 'searchInvoices(status: "overdue", minAmount: Number): Invoice[]';
+  }
+
+  if (schema.name === "openInvoice") {
+    return "openInvoice(invoiceId: String): InvoiceDetail";
+  }
+
+  if (schema.name === "extractPaymentPacket") {
+    return "extractPaymentPacket(invoiceIds: String[]): PaymentPacket";
+  }
+
+  if (schema.name === "exportBankDetails") {
+    return "exportBankDetails(invoiceIds: String[]): CsvFile";
   }
 
   const required = schema.inputSchema.required ?? [];

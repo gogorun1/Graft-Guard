@@ -5,6 +5,7 @@ import { schemaSignature } from "../graft/schemaCompiler";
 import type { AgentMessage as AgentMessageModel } from "../graft/agentNarrator";
 import type { AuditEvent } from "../graft/auditLog";
 import type { ReplayResult, ReplayTrace, ToolSchema } from "../graft/schemaTypes";
+import type { PaymentPacket, VendorAgentEvent } from "../graft/vendorPaymentAgent";
 import { AgentMessageStream } from "./AgentMessageStream";
 
 type PendingApproval = {
@@ -20,11 +21,13 @@ type Props = {
   isLearning: boolean;
   isRunning: boolean;
   pendingApproval?: PendingApproval;
+  paymentPacket?: PaymentPacket;
   replayResult?: ReplayResult;
   replayTrace: ReplayTrace[];
   schemas: ToolSchema[];
   selectedSchema?: ToolSchema;
   toolParams: Record<string, string>;
+  vendorAgentEvents: VendorAgentEvent[];
   onAllow: () => void;
   onCommandChange: (value: string) => void;
   onDeny: () => void;
@@ -44,11 +47,13 @@ export function GraftPanel({
   isLearning,
   isRunning,
   pendingApproval,
+  paymentPacket,
   replayResult,
   replayTrace,
   schemas,
   selectedSchema,
   toolParams,
+  vendorAgentEvents,
   onAllow,
   onCommandChange,
   onDeny,
@@ -80,6 +85,23 @@ export function GraftPanel({
           <button type="button" className="primary-button full-width" onClick={onLearn} disabled={isLearning}>
             {isLearning ? "Compiling..." : "Compile this app"}
           </button>
+        </section>
+      )}
+
+      {!isExtension && vendorAgentEvents.length > 0 && (
+        <section className="panel-section">
+          <div className="section-heading">
+            <h3>Agent workflow</h3>
+            <span>{vendorAgentEvents.length} events</span>
+          </div>
+          <ol className="agent-workflow-list">
+            {vendorAgentEvents.map((event, index) => (
+              <li key={`${event.type}-${index}`}>
+                <strong>{eventLabel(event.type)}</strong>
+                <span>{event.message}</span>
+              </li>
+            ))}
+          </ol>
         </section>
       )}
 
@@ -189,6 +211,55 @@ export function GraftPanel({
         <ApprovalCard schema={pendingApproval.schema} onAllow={onAllow} onDeny={onDeny} />
       )}
 
+      {!isExtension && paymentPacket && (
+        <section className="panel-section">
+          <div className="section-heading">
+            <h3>Payment packet</h3>
+            <span>{paymentPacket.bankDetailsStatus}</span>
+          </div>
+          <div className="payment-packet">
+            <div className="packet-summary-grid">
+              <span>
+                <strong>{paymentPacket.invoices.length}</strong>
+                invoices
+              </span>
+              <span>
+                <strong>EUR {paymentPacket.totalAmount.toLocaleString("en-US")}</strong>
+                total
+              </span>
+              <span>
+                <strong>{paymentPacket.flaggedVendors.length}</strong>
+                flagged vendors
+              </span>
+              <span>
+                <strong>{paymentPacket.needsApproval.length}</strong>
+                needs approval
+              </span>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Invoice</th>
+                  <th>Vendor</th>
+                  <th>Amount</th>
+                  <th>Bank details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paymentPacket.invoices.map((invoice) => (
+                  <tr key={invoice.invoiceId}>
+                    <td>{invoice.invoiceId}</td>
+                    <td>{invoice.vendorName}</td>
+                    <td>EUR {invoice.amount.toLocaleString("en-US")}</td>
+                    <td>{invoice.bankDetails}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       {(!isExtension || replayTrace.length > 0 || replayResult) && (
         <section className="panel-section">
           <div className="section-heading">
@@ -226,6 +297,16 @@ export function GraftPanel({
       )}
     </aside>
   );
+}
+
+function eventLabel(type: VendorAgentEvent["type"]): string {
+  const labels: Record<VendorAgentEvent["type"], string> = {
+    tool_call: "Tool call",
+    tool_result: "Result",
+    guard_required: "Guard",
+    packet_generated: "Packet",
+  };
+  return labels[type];
 }
 
 function inputTypeForProperty(property: unknown): string {
