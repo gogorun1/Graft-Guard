@@ -72,11 +72,11 @@ export function GraftPanel({
       {!isExtension && (
         <section className="panel-section">
           <div className="section-heading">
-            <h3>Learn</h3>
-            <span>{schemas.length > 0 ? "cached locally" : "not learned"}</span>
+            <h3>Compile</h3>
+            <span>{schemas.length > 0 ? "cached locally" : "not compiled"}</span>
           </div>
           <button type="button" className="primary-button full-width" onClick={onLearn} disabled={isLearning}>
-            {isLearning ? "Learning..." : "Learn this app"}
+            {isLearning ? "Compiling..." : "Compile this app"}
           </button>
         </section>
       )}
@@ -85,7 +85,7 @@ export function GraftPanel({
 
       <section className="panel-section">
         <div className="section-heading">
-          <h3>Learned tools</h3>
+          <h3>Compiled tools</h3>
           <span>{schemas.length}</span>
         </div>
         <div className="tool-list">
@@ -105,7 +105,7 @@ export function GraftPanel({
           ))}
           {schemas.length === 0 && (
             <div className="empty-state">
-              {isExtension ? "Learn this website to create a saved tool." : "Click learn to compile tools."}
+              {isExtension ? "Compile this website to create a saved tool." : "Click compile to create tools."}
             </div>
           )}
         </div>

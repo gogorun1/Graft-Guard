@@ -643,9 +643,127 @@ textarea {
   padding: 16px 18px;
 }
 
+.plugin-topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.plugin-topbar p {
+  margin: 0 0 2px;
+  color: #607080;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.plugin-topbar h2 {
+  margin: 0;
+  color: #142536;
+  font-size: 19px;
+  letter-spacing: 0;
+}
+
+.api-plan-button {
+  border: 1px solid #c4ccd4;
+  border-radius: 999px;
+  background: #f7fafc;
+  color: #126b82;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 900;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 .extension-inspector .empty-state,
 .extension-inspector .error-state {
   margin-top: 10px;
+}
+
+.compile-status {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  margin-bottom: 10px;
+  border: 1px solid #d7dde3;
+  border-radius: 8px;
+  background: #f7fafc;
+  padding: 9px 10px;
+}
+
+.compile-status strong {
+  color: #253343;
+  font-size: 13px;
+}
+
+.compile-status span:last-child {
+  grid-column: 2;
+  color: #667585;
+  font-size: 12px;
+}
+
+.compile-status-idle::before,
+.compile-status-compiled::before {
+  display: block;
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border-radius: 999px;
+  content: "";
+}
+
+.compile-status-idle::before {
+  background: #aeb8c3;
+}
+
+.compile-status-compiled::before {
+  background: #2e9f62;
+}
+
+.loading-dot {
+  width: 12px;
+  height: 12px;
+  margin-top: 4px;
+  border: 2px solid #c7d8e2;
+  border-top-color: #126b82;
+  border-radius: 999px;
+  animation: spin 0.75s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.compile-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+  border: 1px solid #d7dde3;
+  border-radius: 8px;
+  background: #f3f6f8;
+  padding: 3px;
+}
+
+.compile-tabs button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #607080;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.compile-tabs button.selected {
+  background: #ffffff;
+  color: #123244;
+  box-shadow: 0 1px 2px rgba(20, 35, 48, 0.12);
 }
 
 .intent-field {
@@ -654,6 +772,11 @@ textarea {
   color: #344354;
   font-size: 12px;
   font-weight: 800;
+}
+
+.intent-panel {
+  display: grid;
+  gap: 8px;
 }
 
 .learn-actions {

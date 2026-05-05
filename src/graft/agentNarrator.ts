@@ -46,7 +46,7 @@ export function narrateAgentEvent(event: AgentNarratorEvent): AgentMessage | nul
       icon: "search",
       phase: "idle",
       text: `I can see ${event.summary.inputs.length} form fields and ${event.summary.buttons.length} buttons on this page.`,
-      detail: "Ready to learn when you are.",
+      detail: "Ready to compile when you are.",
     });
   }
 
@@ -54,7 +54,7 @@ export function narrateAgentEvent(event: AgentNarratorEvent): AgentMessage | nul
     return message(event, {
       icon: "brain",
       phase: "compile",
-      text: "Analyzing page structure and compiling a tool schema.",
+      text: "Compiling this page into a reusable tool.",
       detail: event.summary ? `Found inputs: ${summarizeInputs(event.summary)}` : "Using the known Acme ERP workflow.",
     });
   }
@@ -141,7 +141,7 @@ export function narrateAgentEvent(event: AgentNarratorEvent): AgentMessage | nul
       icon: "error",
       phase: "replay",
       text: "Replay failed. The page may have changed.",
-      detail: `${event.message} Try Show me once to re-learn this workflow.`,
+      detail: `${event.message} Try Show me once to recompile this workflow.`,
     });
   }
 

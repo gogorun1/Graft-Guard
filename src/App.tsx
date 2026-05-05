@@ -165,7 +165,7 @@ export default function App() {
         type: "learned_tool",
         toolName: "queryOrders",
         risk: "read",
-        message: "Learned queryOrders from Acme ERP",
+        message: "Compiled queryOrders from Acme ERP",
         llmCalls: 1,
       });
       addAudit({
@@ -178,7 +178,7 @@ export default function App() {
     } catch (error) {
       addAudit({
         type: "replay_failed",
-        message: error instanceof Error ? error.message : "Learning failed",
+        message: error instanceof Error ? error.message : "Compile failed",
         llmCalls: 0,
       });
     } finally {
@@ -246,7 +246,7 @@ export default function App() {
         llmCalls: 0,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Website learning failed";
+      const message = error instanceof Error ? error.message : "Website compile failed";
       setInspectionError(message);
       addAudit({
         type: "replay_failed",

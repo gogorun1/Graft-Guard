@@ -48,19 +48,42 @@ export function ExtensionInspector({
   onStopCapture,
   onToggleAdvanced,
 }: Props) {
-  const [intentOpen, setIntentOpen] = useState(false);
+  const [compileMode, setCompileMode] = useState<"default" | "custom">("default");
   const hasWarnings = candidateWarnings.length > 0;
   const showFallback = isCapturing || advancedOpen || hasWarnings || Boolean(error);
   const showAdvancedButton = advancedOpen || hasWarnings || Boolean(error) || Boolean(candidateSchema);
+  const compileStatus = isLearningWebsite ? "compiling" : candidateSchema ? "compiled" : "idle";
 
   return (
-    <section className="extension-inspector" aria-label="Learn website">
+    <section className="extension-inspector" aria-label="Compile website">
+      <header className="plugin-topbar">
+        <div>
+          <p>Graft Guard</p>
+          <h2>Compile website tool</h2>
+        </div>
+        <a className="api-plan-button" href="https://platform.minimax.io" target="_blank" rel="noreferrer">
+          MiniMax plan
+        </a>
+      </header>
+
       <div className="section-heading">
-        <h3>Learn website</h3>
-        <span>{isExtension ? "workflow compile" : "standalone demo"}</span>
+        <h3>Compile website</h3>
+        <span>{isExtension ? "workflow compiler" : "standalone demo"}</span>
       </div>
 
       <AgentMessageStream messages={agentMessages} />
+
+      <div className={`compile-status compile-status-${compileStatus}`}>
+        {isLearningWebsite && <span className="loading-dot" aria-hidden="true" />}
+        <strong>{compileStatus === "compiling" ? "Compiling" : compileStatus === "compiled" ? "Compiled" : "Ready to compile"}</strong>
+        <span>
+          {compileStatus === "compiling"
+            ? "Reading the page and drafting a tool schema."
+            : compileStatus === "compiled"
+              ? "Review the suggested tool, then save it."
+              : "Use the default goal or confirm a custom intent."}
+        </span>
+      </div>
 
       {summary && (
         <div className="learned-page-chip">
@@ -69,25 +92,51 @@ export function ExtensionInspector({
         </div>
       )}
 
-      <div className="learn-actions">
+      <div className="compile-tabs" role="tablist" aria-label="Compile mode">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={compileMode === "default"}
+          className={compileMode === "default" ? "selected" : ""}
+          onClick={() => setCompileMode("default")}
+        >
+          Quick compile
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={compileMode === "custom"}
+          className={compileMode === "custom" ? "selected" : ""}
+          onClick={() => setCompileMode("custom")}
+        >
+          Custom intent
+        </button>
+      </div>
+
+      {compileMode === "default" ? (
         <button
           type="button"
           className="primary-button full-width"
           onClick={onLearnWebsite}
           disabled={!isExtension || isLearningWebsite}
         >
-          {isLearningWebsite ? "Learning..." : candidateSchema ? "Re-learn website" : "Learn this website"}
+          {isLearningWebsite ? "Compiling..." : candidateSchema ? "Recompile website" : "Compile website"}
         </button>
-        <button type="button" className="secondary-button full-width" onClick={() => setIntentOpen((current) => !current)}>
-          {intentOpen ? "Hide intent" : "Customize intent"}
-        </button>
-      </div>
-
-      {intentOpen && (
-        <label className="intent-field">
-          Describe what you want to automate
-          <textarea value={intent} onChange={(event) => onIntentChange(event.target.value)} />
-        </label>
+      ) : (
+        <div className="intent-panel">
+          <label className="intent-field">
+            Describe what you want to automate
+            <textarea value={intent} onChange={(event) => onIntentChange(event.target.value)} />
+          </label>
+          <button
+            type="button"
+            className="primary-button full-width"
+            onClick={onLearnWebsite}
+            disabled={!isExtension || isLearningWebsite || intent.trim().length === 0}
+          >
+            {isLearningWebsite ? "Compiling..." : "Confirm intent and compile"}
+          </button>
+        </div>
       )}
 
       {candidateSchema && (
@@ -157,7 +206,7 @@ export function ExtensionInspector({
           </div>
           <div className="page-summary-title">
             <strong>{summary?.title ?? "No page inspected yet"}</strong>
-            <span>{summary?.origin ?? "Click Learn website or Refresh inspect"}</span>
+            <span>{summary?.origin ?? "Click Compile website or Refresh inspect"}</span>
           </div>
 
           {summary && (

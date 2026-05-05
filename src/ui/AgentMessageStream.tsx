@@ -22,7 +22,7 @@ export function AgentMessageStream({ messages }: Props) {
   return (
     <section className={`agent-stream ${historyOpen ? "agent-stream-expanded" : "agent-stream-collapsed"}`} aria-label="Agent activity">
       <div className="agent-stream-heading">
-        <span>{latestMessage.phase === "compile" ? "Thinking" : latestMessage.phase === "replay" ? "Running locally" : "Ready"}</span>
+        <span>{latestMessage.phase === "compile" ? "Compile" : latestMessage.phase === "replay" ? "Running locally" : "Ready"}</span>
         {earlierMessages.length > 0 && (
           <button
             type="button"
