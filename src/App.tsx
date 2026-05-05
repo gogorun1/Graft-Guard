@@ -252,26 +252,44 @@ export default function App() {
     }
   }
 
-  async function handleLearnWebsite() {
+  async function handleLearnWebsite(options: { mode?: "full" | "missing" } = {}) {
+    const compileMode = options.mode ?? "full";
+    const isMissingCompile = compileMode === "missing";
     setIsLearningWebsite(true);
     setInspectionError(undefined);
     setCandidateTool(undefined);
-    setCompiledToolGroup(undefined);
-    setCompileActivity(["Inspecting the active page"]);
+    if (!isMissingCompile) {
+      setCompiledToolGroup(undefined);
+    }
+    setCompileActivity([
+      isMissingCompile
+        ? `Planning delta compile against ${schemas.length} saved tools`
+        : "Inspecting the active page",
+    ]);
 
     try {
       const summary = await collectActivePageSummary();
       setPageSummary(summary);
       addAgentMessage({ type: "compile_started", summary });
       addCompileActivity(`Observed ${summary.inputs.length} inputs, ${summary.buttons.length} buttons, and ${summary.tables.length} tables`);
-      addCompileActivity("Preparing AgentDraft request from prompt and page summary");
+      if (isMissingCompile) {
+        addCompileActivity(`Reusing ${taskPlan.reusedTools.length} existing tools`);
+        addCompileActivity(`Compiling ${taskPlan.missingCapabilities.length} missing capabilities`);
+      } else {
+        addCompileActivity("Preparing AgentDraft request from prompt and page summary");
+      }
       await sleep(fakeCompileDelayMs);
       addCompileActivity("Calling Agent Compiler and waiting for semantic draft");
 
       const effectiveIntent = websiteIntent.trim() || defaultWebsiteIntent;
       setCommand(effectiveIntent);
       setWorkflowInputs(inferWorkflowRunInputs(effectiveIntent, workflowInputs));
-      const group = await compileToolGroupWithAgent({ prompt: effectiveIntent, pageSummary: summary });
+      const group = await compileToolGroupWithAgent({
+        prompt: effectiveIntent,
+        pageSummary: summary,
+        existingTools: isMissingCompile ? schemas : [],
+        missingCapabilities: isMissingCompile ? taskPlan.missingCapabilities : [],
+      });
       addCompileActivity(
         group.provider === "agent-api"
           ? "Received AgentDraft from MiniMax API"
@@ -279,11 +297,20 @@ export default function App() {
       );
       addCompileActivity(`Normalized draft into ${group.tools.length} reusable tools`);
       addCompileActivity(`Validated ${group.workflowPlan.length} planned workflow steps`);
-      const savedTools = replacePageSchemas(summary, group.tools);
-      addCompileActivity("Cached reusable tools for this page");
-      setCompiledToolGroup(group);
+      const savedTools = isMissingCompile ? mergeToolSchemas(schemas, group.tools) : group.tools;
+      replacePageSchemas(summary, savedTools);
+      addCompileActivity(
+        isMissingCompile
+          ? `Cached ${savedTools.length} tools after preserving existing schemas`
+          : "Cached reusable tools for this page",
+      );
+      setCompiledToolGroup({
+        ...group,
+        tools: savedTools,
+        workflowPlan: mergeWorkflowPlan(compiledToolGroup?.workflowPlan ?? [], group.workflowPlan, isMissingCompile),
+      });
       setSchemas(savedTools);
-      setSelectedToolName(group.tools[0]?.name ?? "generatedTool");
+      setSelectedToolName(group.tools[0]?.name ?? savedTools[0]?.name ?? "generatedTool");
       addAudit({
         type: "learned_tool",
         toolName: group.name,
@@ -413,7 +440,7 @@ export default function App() {
 
   async function handleRun() {
     if (compiledToolGroup && taskPlan.missingCapabilities.length > 0) {
-      await handleLearnWebsite();
+      await handleLearnWebsite({ mode: "missing" });
       return;
     }
 
@@ -909,6 +936,28 @@ function actionBarSummary(
   }
 
   return `${toolCount} reusable tools saved · ${taskPlan.guardedTools.length} guarded`;
+}
+
+function mergeToolSchemas(existingTools: ToolSchema[], compiledTools: ToolSchema[]): ToolSchema[] {
+  const existingNames = new Set(existingTools.map((tool) => tool.name));
+  const newTools = compiledTools.filter((tool) => !existingNames.has(tool.name));
+  return [...newTools, ...existingTools];
+}
+
+function mergeWorkflowPlan(
+  existingPlan: CompiledToolGroup["workflowPlan"],
+  compiledPlan: CompiledToolGroup["workflowPlan"],
+  merge: boolean,
+): CompiledToolGroup["workflowPlan"] {
+  if (!merge) {
+    return compiledPlan;
+  }
+
+  const existingTools = new Set(existingPlan.map((step) => step.tool));
+  return [
+    ...existingPlan,
+    ...compiledPlan.filter((step) => !existingTools.has(step.tool)),
+  ];
 }
 
 function collectSchemaParams(schema: ToolSchema, values: Record<string, string>): Record<string, unknown> {

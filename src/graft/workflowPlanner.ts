@@ -129,18 +129,25 @@ function planMissingWorkflow(
   inputs: WorkflowRunInputs,
   detail: { title: string; summary: string; missing: string[] },
 ): WorkflowTaskPlan {
+  const toolNames = new Set(tools.map((tool) => tool.name));
   const reusableInvoiceTools = tools
     .filter((tool) => ["searchInvoices", "openInvoice", "extractPaymentPacket"].includes(tool.name))
     .map((tool) => tool.name);
+  const missing = detail.missing.filter((tool) => !toolNames.has(tool));
+  const newlyCovered = detail.missing.filter((tool) => toolNames.has(tool));
+  const reusedTools = [...reusableInvoiceTools, ...newlyCovered];
 
   return {
     prompt,
     title: detail.title,
-    summary: detail.summary,
-    status: reusableInvoiceTools.length > 0 ? "partial" : "needs_tools",
-    reusedTools: reusableInvoiceTools,
+    summary:
+      missing.length > 0
+        ? detail.summary
+        : `Ready to run with ${reusedTools.length} saved tools.`,
+    status: missing.length > 0 ? (reusableInvoiceTools.length > 0 ? "partial" : "needs_tools") : "ready",
+    reusedTools,
     guardedTools: tools.filter((tool) => tool.name === "exportBankDetails").map((tool) => tool.name),
-    missingCapabilities: detail.missing,
+    missingCapabilities: missing,
     inputs,
   };
 }

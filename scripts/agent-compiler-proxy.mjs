@@ -58,6 +58,9 @@ async function callCompiler(body) {
     '  "proposedTools": [{ "name": string, "description": string, "risk": "read" | "write" | "export" | "destructive" }]',
     "}",
     "Use the page controls and table headers to infer reusable capabilities.",
+    "If existingTools are provided, treat them as the saved tool library. Reuse them in the workflow plan instead of regenerating same-name or equivalent tools.",
+    "If missingCapabilities are provided, return only tools needed for those missing capabilities unless an existing tool must be updated. Do not repeat existing tool schemas.",
+    "If an existing tool truly must change, explain why in riskNotes and use the same name only when an update is unavoidable.",
     "Call out sensitive data, exports, destructive actions, and write actions as risks.",
     "Output JSON only if possible. If your provider emits reasoning, still include a parseable JSON object.",
     "",
@@ -66,6 +69,12 @@ async function callCompiler(body) {
     "",
     "Page summary:",
     JSON.stringify(body.pageSummary, null, 2),
+    "",
+    "Existing saved tools:",
+    JSON.stringify(body.existingTools ?? [], null, 2),
+    "",
+    "Missing capabilities to compile:",
+    JSON.stringify(body.missingCapabilities ?? [], null, 2),
   ].join("\n");
 
   const upstream = await fetch(apiUrl, {
@@ -92,6 +101,7 @@ async function callCompiler(body) {
 
 function normalizeCompilerResponse(parsed, body) {
   const isVendorWorkflow = isVendorPaymentSummary(body?.pageSummary);
+  const missingCapabilities = Array.isArray(body?.missingCapabilities) ? body.missingCapabilities : [];
 
   if (isGraftToolGroup(parsed)) {
     return {
@@ -104,11 +114,51 @@ function normalizeCompilerResponse(parsed, body) {
     };
   }
 
+  if (missingCapabilities.length > 0) {
+    return buildMissingCapabilityToolGroup(parsed, body, missingCapabilities);
+  }
+
   if (isVendorWorkflow) {
     return buildVendorPaymentToolGroup(parsed, body);
   }
 
   return buildGenericToolGroup(parsed, body);
+}
+
+function buildMissingCapabilityToolGroup(agentDraft, body, missingCapabilities) {
+  const tools = missingCapabilities.map((capability) => buildMissingCapabilityTool(capability, body?.pageSummary));
+
+  return {
+    name: "Missing capability compile",
+    description: "Compile only workflow capabilities not covered by saved tools.",
+    tools,
+    workflowPlan: tools.map((tool) => ({
+      tool: tool.name,
+      guard: tool.risk === "export" || tool.risk === "destructive",
+    })),
+    riskNotes: [
+      "MiniMax produced an AgentDraft; Graft Guard preserved existing tools and normalized only missing capabilities.",
+      ...summarizeAgentDraft(agentDraft),
+    ],
+  };
+}
+
+function buildMissingCapabilityTool(capability, summary) {
+  const name = toCamelCase(capability);
+  const risk = inferActionRisk(capability);
+  const table = summary?.tables?.[0]?.selector;
+
+  return {
+    name,
+    description: `${name} generated as a missing workflow capability`,
+    risk,
+    inputSchema: {
+      type: "object",
+      properties: risk === "read" ? {} : { targetId: { type: "string", title: "Target ID" } },
+      required: risk === "read" ? [] : ["targetId"],
+    },
+    replayPlan: risk === "read" && table ? [{ type: "extractTable", selector: table }] : [],
+  };
 }
 
 function isGraftToolGroup(value) {
@@ -451,7 +501,7 @@ function inferDraftRisk(agentDraft) {
 }
 
 function inferActionRisk(text) {
-  const lowered = String(text ?? "").toLowerCase();
+  const lowered = splitIdentifierWords(String(text ?? "")).toLowerCase();
   if (/\b(delete|remove|destroy|revoke|terminate|drop|apply hold|block)\b/.test(lowered)) {
     return "destructive";
   }
@@ -465,6 +515,12 @@ function inferActionRisk(text) {
   }
 
   return "read";
+}
+
+function splitIdentifierWords(text) {
+  return text
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ");
 }
 
 function normalizeRisk(risk) {

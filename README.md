@@ -58,6 +58,23 @@ Prepare a vendor payment packet for all overdue invoices above EUR 5,000, but do
 
 This is the primary hackathon demo. It shows Graft Guard as a governed agent workflow layer, not just a form replay script.
 
+## Demo Prompt Matrix
+
+The ERP seed data includes overdue, pending, and paid invoices across `none`, `review`, and `blocked` risk states. Use these prompts to show tool reuse and guarded workflow behavior:
+
+- `Prepare a vendor payment packet for all overdue invoices above EUR 5,000, but do not export bank details without approval.`
+  Shows the main workflow, Guard denial, and redacted packet generation.
+- `Prepare a vendor payment packet for all pending invoices above EUR 10,000, but do not export bank details without approval.`
+  Reuses the saved invoice/payment tools with different run inputs.
+- `Prepare a vendor payment packet for all overdue invoices above EUR 20,000, including flagged vendors, but do not export bank details without approval.`
+  Shows a smaller high-risk packet with blocked/review vendors.
+- `Find paid invoices above EUR 7,000 and prepare an audit summary without exporting bank details.`
+  Demonstrates a read-only workflow that can reuse search/open/extract capabilities.
+- `Find customers with unpaid invoices over EUR 10,000, check their latest orders, and prepare a credit-hold recommendation without applying the hold.`
+  Demonstrates a delta compile: saved invoice tools should remain in the tool library while the agent adds only missing customer/credit-hold capabilities.
+
+On recompile, the extension sends the saved tool library to the agent compiler. The compiler is expected to reuse equivalent saved tools, return only missing capabilities, and explain unavoidable updates in risk notes.
+
 ## Build Extension
 
 ```bash

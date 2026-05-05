@@ -206,30 +206,14 @@ export function GraftPanel({
             </div>
           ) : compiledToolGroup ? (
             <div className="compiled-workflow-card">
-              <div className="compiled-workflow-group">
-                <h4>{compiledToolGroup.tools.length} typed tools</h4>
-                <div className="generated-tool-list">
-                  {compiledToolGroup.tools.map((tool) => (
-                    <button
-                      type="button"
-                      key={tool.name}
-                      className={selectedSchema?.name === tool.name ? "selected" : ""}
-                      onClick={() => onSelectSchema(tool)}
-                    >
-                      <span>
-                        <strong>{tool.name}</strong>
-                        <small>{tool.description}</small>
-                      </span>
-                      <b>{tool.risk}</b>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="compiled-tool-pills" aria-label="Reusable tool names">
-                {compiledToolGroup.tools.map((tool) => (
-                  <span key={tool.name}>{tool.name}</span>
-                ))}
-              </div>
+              <ToolLibrarySections
+                guardedToolNames={taskPlan.guardedTools}
+                missingCapabilities={taskPlan.missingCapabilities}
+                reusedToolNames={taskPlan.reusedTools}
+                selectedSchema={selectedSchema}
+                tools={compiledToolGroup.tools}
+                onSelectSchema={onSelectSchema}
+              />
               {selectedSchema && (
                 <div className="generated-tool-schema">
                   <div className="section-heading">
@@ -367,7 +351,7 @@ export function GraftPanel({
       )}
 
       {(isRunning || vendorAgentEvents.length > 0) && compiledToolGroup && (
-        <section className="panel-section">
+        <section className={`panel-section ${pendingApproval ? "workflow-paused-section" : ""}`}>
           <div className="section-heading">
             <h3>Workflow run</h3>
             <span>{runStatusLabel(isRunning, pendingApproval, vendorAgentEvents.length)}</span>
@@ -381,7 +365,7 @@ export function GraftPanel({
           {vendorAgentEvents.length > 0 && (
             <ol className="agent-workflow-list">
               {vendorAgentEvents.map((event, index) => (
-                <li key={`${event.type}-${index}`}>
+                <li key={`${event.type}-${index}`} className={`agent-event-${event.type}`}>
                   <strong>{eventLabel(event.type)}</strong>
                   <span>{event.message}</span>
                 </li>
@@ -570,6 +554,99 @@ export function GraftPanel({
         </section>
       )}
     </aside>
+  );
+}
+
+function ToolLibrarySections({
+  guardedToolNames,
+  missingCapabilities,
+  reusedToolNames,
+  selectedSchema,
+  tools,
+  onSelectSchema,
+}: {
+  guardedToolNames: string[];
+  missingCapabilities: string[];
+  reusedToolNames: string[];
+  selectedSchema?: ToolSchema;
+  tools: ToolSchema[];
+  onSelectSchema: (schema: ToolSchema) => void;
+}) {
+  const reused = tools.filter((tool) => reusedToolNames.includes(tool.name));
+  const generated = tools.filter((tool) => !reusedToolNames.includes(tool.name));
+
+  return (
+    <div className="tool-library-sections">
+      <ToolLibrarySection
+        label="Reused saved tools"
+        tools={reused}
+        selectedSchema={selectedSchema}
+        guardedToolNames={guardedToolNames}
+        onSelectSchema={onSelectSchema}
+      />
+      <ToolLibrarySection
+        label="New or updated tools"
+        tools={generated}
+        selectedSchema={selectedSchema}
+        guardedToolNames={guardedToolNames}
+        onSelectSchema={onSelectSchema}
+      />
+      {missingCapabilities.length > 0 && (
+        <div className="tool-library-section tool-library-missing">
+          <h4>Missing capabilities</h4>
+          <div>
+            {missingCapabilities.map((capability) => (
+              <span key={capability}>{capability}</span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolLibrarySection({
+  guardedToolNames,
+  label,
+  selectedSchema,
+  tools,
+  onSelectSchema,
+}: {
+  guardedToolNames: string[];
+  label: string;
+  selectedSchema?: ToolSchema;
+  tools: ToolSchema[];
+  onSelectSchema: (schema: ToolSchema) => void;
+}) {
+  if (tools.length === 0) {
+    return (
+      <div className="tool-library-section">
+        <h4>{label}</h4>
+        <div className="tool-library-empty">None</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="tool-library-section">
+      <h4>{label}</h4>
+      <div className="generated-tool-list">
+        {tools.map((tool) => (
+          <button
+            type="button"
+            key={tool.name}
+            className={selectedSchema?.name === tool.name ? "selected" : ""}
+            onClick={() => onSelectSchema(tool)}
+          >
+            <span>
+              <strong>{tool.name}</strong>
+              <small>{tool.description}</small>
+            </span>
+            <b>{guardedToolNames.includes(tool.name) ? "guarded" : tool.risk}</b>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

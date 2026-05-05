@@ -726,8 +726,30 @@ textarea {
   display: grid;
   gap: 2px;
   border-left: 3px solid #126b82;
-  background: #f7fafc;
-  padding: 8px 10px;
+  background: #f4fafc;
+  padding: 8px 10px 8px 9px;
+}
+
+.workflow-paused-section {
+  background: #fffaf0;
+}
+
+.workflow-paused-section .section-heading span {
+  border-radius: 999px;
+  background: #fff0e9;
+  color: #8a2d14;
+  padding: 2px 7px;
+  font-weight: 900;
+}
+
+.agent-workflow-list .agent-event-guard_required {
+  border-left-color: #b4532d;
+  background: #fff4ed;
+}
+
+.agent-workflow-list .agent-event-packet_generated {
+  border-left-color: #2e7d52;
+  background: #f1faf5;
 }
 
 .agent-workflow-list strong {
@@ -982,6 +1004,50 @@ textarea {
   text-transform: uppercase;
 }
 
+.tool-library-sections {
+  display: grid;
+  gap: 10px;
+}
+
+.tool-library-section {
+  display: grid;
+  gap: 6px;
+}
+
+.tool-library-section h4 {
+  margin: 0;
+  color: #526273;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.tool-library-empty {
+  border: 1px dashed #c9d2db;
+  border-radius: 6px;
+  color: #718091;
+  padding: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tool-library-missing div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tool-library-missing span {
+  border: 1px solid #e4c674;
+  border-radius: 999px;
+  background: #fffaf0;
+  color: #6d4a00;
+  padding: 3px 7px;
+  font-family: SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 800;
+}
+
 .generated-tool-schema {
   display: grid;
   gap: 8px;
@@ -1216,8 +1282,8 @@ textarea {
 .audit-timeline li {
   display: grid;
   gap: 2px;
-  border-left: 3px solid #126b82;
-  padding-left: 9px;
+  border-left: 3px solid #9aa6b2;
+  padding: 7px 0 7px 9px;
 }
 
 .audit-timeline time {
