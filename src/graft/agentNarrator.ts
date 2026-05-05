@@ -66,7 +66,7 @@ export function narrateAgentEvent(event: AgentNarratorEvent): AgentMessage | nul
       text: "Reading the page structure and workflow goal.",
       detail: event.summary
         ? `Observed ${event.summary.inputs.length} inputs, ${event.summary.buttons.length} actions, and ${event.summary.tables.length} tables: ${summarizeInputs(event.summary)}.`
-        : "Using the known Acme ERP workflow.",
+        : "MiniMax can request browser tools before drafting the workflow.",
     });
   }
 
@@ -75,8 +75,8 @@ export function narrateAgentEvent(event: AgentNarratorEvent): AgentMessage | nul
       return message(event, {
         icon: "brain",
         phase: "compile",
-        text: "Sending the goal and page summary to the compiler.",
-        detail: "MiniMax can produce an AgentDraft; Graft Guard will keep selector and replay execution local.",
+        text: "Sending the goal and browser tool manifest to the compiler.",
+        detail: "MiniMax can call inspect_active_page; Graft Guard executes browser inspection locally.",
       });
     }
 

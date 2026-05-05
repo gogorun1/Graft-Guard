@@ -50,7 +50,6 @@ import { ExtensionInspector } from "./ui/ExtensionInspector";
 
 const presetCommand = "Prepare a vendor payment packet for all overdue invoices above EUR 5,000, but do not export bank details without approval.";
 const defaultWebsiteIntent = presetCommand;
-const fakeCompileDelayMs = 2000;
 const simulatedRunDelayMs = 1200;
 
 type PendingApproval = {
@@ -269,39 +268,57 @@ export default function App() {
     setCompileActivity([
       isMissingCompile
         ? `Planning delta compile against ${schemas.length} saved tools`
-        : "Inspecting the active page",
+        : "Starting MiniMax compile with browser tools",
     ]);
 
     try {
-      const summary = await collectActivePageSummary();
-      setPageSummary(summary);
-      addAgentMessage({ type: "compile_started", summary });
-      const stopCompileStages = startCompileStageMessages(summary, addAgentMessage);
-      addCompileActivity(`Observed ${summary.inputs.length} inputs, ${summary.buttons.length} buttons, and ${summary.tables.length} tables`);
+      let inspectedSummary: PageDomSummary | undefined;
+      addAgentMessage({ type: "compile_started" });
       if (isMissingCompile) {
         addCompileActivity(`Reusing ${taskPlan.reusedTools.length} existing tools`);
         addCompileActivity(`Compiling ${taskPlan.missingCapabilities.length} missing capabilities`);
-      } else {
-        addCompileActivity("Preparing AgentDraft request from prompt and page summary");
       }
-      await sleep(fakeCompileDelayMs);
-      addCompileActivity("Calling Agent Compiler and waiting for semantic draft");
 
       const effectiveIntent = websiteIntent.trim() || defaultWebsiteIntent;
       setCommand(effectiveIntent);
       setWorkflowInputs(inferWorkflowRunInputs(effectiveIntent, workflowInputs));
       const group = await compileToolGroupWithAgent({
         prompt: effectiveIntent,
-        pageSummary: summary,
+        inspectActivePage: async () => {
+          setIsInspecting(true);
+          try {
+            const summary = await collectActivePageSummary();
+            inspectedSummary = summary;
+            setPageSummary(summary);
+            addAgentMessage({ type: "compile_started", summary });
+            return summary;
+          } finally {
+            setIsInspecting(false);
+          }
+        },
+        onActivity: (message) => {
+          addCompileActivity(message);
+          if (message.startsWith("Sending compile goal")) {
+            addAgentMessage({ type: "compile_stage", stage: "send_to_compiler", summary: inspectedSummary });
+          }
+          if (message.startsWith("Sending inspected page summary")) {
+            addAgentMessage({ type: "compile_stage", stage: "normalize_draft", summary: inspectedSummary });
+          }
+        },
         existingTools: isMissingCompile ? schemas : [],
         missingCapabilities: isMissingCompile ? taskPlan.missingCapabilities : [],
-      }).finally(stopCompileStages);
+      });
+      const summary = inspectedSummary ?? pageSummary;
+      if (!summary) {
+        throw new Error("Agent compiler finished without an inspected page summary.");
+      }
       addCompileActivity(
         group.provider === "agent-api"
           ? "Received AgentDraft from MiniMax API"
           : "Used local compiler fallback",
       );
       addCompileActivity(`Normalized draft into ${group.tools.length} reusable tools`);
+      addAgentMessage({ type: "compile_stage", stage: "attach_guard", summary });
       addCompileActivity(`Validated ${group.workflowPlan.length} planned workflow steps`);
       const savedTools = isMissingCompile ? mergeToolSchemas(schemas, group.tools) : group.tools;
       replacePageSchemas(summary, savedTools);
@@ -1018,28 +1035,6 @@ function defaultParamValue(property: unknown): string {
 
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function startCompileStageMessages(
-  summary: PageDomSummary,
-  addAgentMessage: (event: AgentNarratorInput) => void,
-): () => void {
-  addAgentMessage({ type: "compile_stage", stage: "send_to_compiler", summary });
-
-  const timers = [
-    window.setTimeout(() => {
-      addAgentMessage({ type: "compile_stage", stage: "normalize_draft", summary });
-    }, 700),
-    window.setTimeout(() => {
-      addAgentMessage({ type: "compile_stage", stage: "attach_guard", summary });
-    }, 1400),
-  ];
-
-  return () => {
-    for (const timer of timers) {
-      window.clearTimeout(timer);
-    }
-  };
 }
 
 function isVendorPaymentRequest(command: string): boolean {
