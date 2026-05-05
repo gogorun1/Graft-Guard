@@ -46,6 +46,7 @@ async function callCompiler(body) {
   const prompt = [
     "You are the Graft Guard Agent Compiler.",
     "Return only strict JSON. Do not include markdown.",
+    "Do not include <think> tags, reasoning, explanations, or commentary.",
     "Your JSON must match this TypeScript contract exactly:",
     "{",
     '  "name": "Vendor payment workflow",',
@@ -299,9 +300,57 @@ function extractText(payload) {
 }
 
 function parseJsonResponse(text) {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const raw = fenced ? fenced[1] : text;
+  const withoutThinking = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  const fenced = withoutThinking.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const raw = fenced ? fenced[1] : extractFirstJsonObject(withoutThinking);
   return JSON.parse(raw);
+}
+
+function extractFirstJsonObject(text) {
+  const start = text.indexOf("{");
+  if (start === -1) {
+    return text;
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escaping = false;
+
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (escaping) {
+      escaping = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaping = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) {
+      continue;
+    }
+
+    if (char === "{") {
+      depth += 1;
+    }
+
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(start, index + 1);
+      }
+    }
+  }
+
+  return text.slice(start);
 }
 
 function readJson(request) {
