@@ -61,13 +61,15 @@ export function GraftPanel({
 }: Props) {
   return (
     <aside className="graft-panel" aria-label="Graft Guard panel">
-      <header className="panel-header">
-        <div>
-          <p>Graft Guard</p>
-          <h2>Typed tools from legacy UI</h2>
-        </div>
-        <span className="mode-badge">{isRunning ? "local replay" : schemas.length > 0 ? "cached tools" : "ready"}</span>
-      </header>
+      {!isExtension && (
+        <header className="panel-header">
+          <div>
+            <p>Graft Guard</p>
+            <h2>Typed tools from legacy UI</h2>
+          </div>
+          <span className="mode-badge">{isRunning ? "local replay" : schemas.length > 0 ? "cached tools" : "ready"}</span>
+        </header>
+      )}
 
       {!isExtension && (
         <section className="panel-section">
