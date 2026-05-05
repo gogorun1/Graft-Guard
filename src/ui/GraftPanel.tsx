@@ -397,6 +397,7 @@ export function GraftPanel({
 
 function eventLabel(type: VendorAgentEvent["type"]): string {
   const labels: Record<VendorAgentEvent["type"], string> = {
+    plan_selected: "Plan",
     tool_call: "Tool call",
     tool_result: "Result",
     guard_required: "Guard",

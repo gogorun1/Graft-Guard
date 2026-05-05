@@ -32,6 +32,7 @@ import {
 } from "./graft/agentCompiler";
 import {
   finishVendorPaymentWorkflow,
+  startCompiledVendorPaymentWorkflow,
   startVendorPaymentWorkflow,
   type PaymentPacket,
   type VendorAgentEvent,
@@ -406,7 +407,12 @@ export default function App() {
   }
 
   async function handleRun() {
-    if (isVendorPaymentRequest(command) && (!isExtension || compiledToolGroup)) {
+    if (compiledToolGroup && isVendorPaymentGroup(compiledToolGroup)) {
+      await runVendorPaymentWorkflow();
+      return;
+    }
+
+    if (isVendorPaymentRequest(command) && !isExtension) {
       await runVendorPaymentWorkflow();
       return;
     }
@@ -586,7 +592,9 @@ export default function App() {
 
     try {
       await sleep(simulatedRunDelayMs);
-      const run = startVendorPaymentWorkflow(command);
+      const run = compiledToolGroup
+        ? startCompiledVendorPaymentWorkflow(compiledToolGroup, command)
+        : startVendorPaymentWorkflow(command);
       setVendorAgentEvents(run.events);
 
       for (const event of run.events) {
@@ -824,6 +832,11 @@ function sleep(ms: number) {
 function isVendorPaymentRequest(command: string): boolean {
   const normalized = command.toLowerCase();
   return normalized.includes("payment packet") || normalized.includes("overdue invoice");
+}
+
+function isVendorPaymentGroup(group: CompiledToolGroup): boolean {
+  const tools = new Set(group.tools.map((tool) => tool.name));
+  return tools.has("searchInvoices") && tools.has("exportBankDetails");
 }
 
 function toolNameForVendorEvent(event: VendorAgentEvent): string {
