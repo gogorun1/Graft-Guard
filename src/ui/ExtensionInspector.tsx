@@ -50,7 +50,6 @@ export function ExtensionInspector({
   const [customToolOpen, setCustomToolOpen] = useState(false);
   const hasWarnings = candidateWarnings.length > 0;
   const showCustomTool = isCapturing || customToolOpen || hasWarnings || Boolean(error);
-  const showAdvancedButton = advancedOpen || hasWarnings || Boolean(error) || Boolean(candidateSchema);
   const compileStatus = isLearningWebsite ? "compiling" : candidateSchema ? "compiled" : "idle";
   const latestMessage = agentMessages[0]?.text;
   const compileStatusText =
@@ -123,14 +122,6 @@ export function ExtensionInspector({
         </div>
       )}
 
-      {showAdvancedButton && (
-        <div className="fallback-row fallback-row-single">
-          <button type="button" className="secondary-button" onClick={onToggleAdvanced}>
-            {advancedOpen ? "Hide advanced" : "Advanced"}
-          </button>
-        </div>
-      )}
-
       {!isExtension && (
         <div className="empty-state">
           Load the built `dist/` folder as an unpacked extension to inspect real pages.
@@ -172,8 +163,17 @@ export function ExtensionInspector({
         </div>
       )}
 
+      <button
+        type="button"
+        className="custom-tool-toggle advanced-toggle"
+        onClick={onToggleAdvanced}
+        aria-expanded={advancedOpen}
+      >
+        {advancedOpen ? "Hide advanced" : "Advanced"}
+      </button>
+
       {advancedOpen && (
-        <div className="page-summary">
+        <div className="advanced-card page-summary">
           <div className="section-heading">
             <h3>Advanced context</h3>
             <button type="button" className="text-button" onClick={onInspect} disabled={!isExtension || isInspecting}>

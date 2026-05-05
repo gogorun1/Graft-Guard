@@ -791,10 +791,22 @@ textarea {
   padding: 0;
 }
 
+.advanced-toggle {
+  margin-top: 12px;
+  color: #526273;
+}
+
 .custom-tool-card {
   display: grid;
   gap: 8px;
   margin-top: 10px;
+  border: 1px solid #d7dde3;
+  border-radius: 6px;
+  background: #fbfcfd;
+  padding: 9px;
+}
+
+.advanced-card {
   border: 1px solid #d7dde3;
   border-radius: 6px;
   background: #fbfcfd;
