@@ -32,11 +32,11 @@ function AuditBadge({ event }: { event: AuditEvent }) {
 
 function auditBadge(event: AuditEvent): { kind: "ai" | "local"; label: string } {
   if (event.llmCalls > 0) {
-    return { kind: "ai", label: "AI-assisted" };
+    return { kind: "ai", label: "Compile" };
   }
 
   if (event.type === "learned_tool" && !/cached|saved/i.test(event.message)) {
-    return { kind: "ai", label: "AI-assisted" };
+    return { kind: "ai", label: "Compile" };
   }
 
   return { kind: "local", label: "Local" };

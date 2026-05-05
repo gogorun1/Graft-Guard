@@ -98,7 +98,7 @@ export function GraftPanel({
             >
               <span>{schema.name}</span>
               <small>
-                <b className="tool-cache-badge">{isExtension ? "AI · Cached" : "AI-compiled tool"}</b>
+                <b className="tool-cache-badge">{isExtension ? "Compiled · Cached" : "Compiled tool"}</b>
                 {schema.risk}
               </small>
             </button>

@@ -57,7 +57,7 @@ export function ExtensionInspector({
     <section className="extension-inspector" aria-label="Learn website">
       <div className="section-heading">
         <h3>Learn website</h3>
-        <span>{isExtension ? "AI-assisted compile" : "standalone demo"}</span>
+        <span>{isExtension ? "workflow compile" : "standalone demo"}</span>
       </div>
 
       <AgentMessageStream messages={agentMessages} />
