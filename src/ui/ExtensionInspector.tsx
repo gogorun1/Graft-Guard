@@ -168,9 +168,14 @@ export function ExtensionInspector({
 
       {error && <div className="error-state">{error}</div>}
 
-      {!showCustomTool && (
-        <button type="button" className="custom-tool-toggle" onClick={() => setCustomToolOpen(true)}>
-          Customized tool
+      {!isCapturing && (
+        <button
+          type="button"
+          className="custom-tool-toggle"
+          onClick={() => setCustomToolOpen((current) => !current)}
+          aria-expanded={showCustomTool}
+        >
+          {showCustomTool ? "Hide customized tool" : "Customized tool"}
         </button>
       )}
 
