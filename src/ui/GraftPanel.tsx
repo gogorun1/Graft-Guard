@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AuditTimeline } from "./AuditTimeline";
 import { ApprovalCard } from "./ApprovalCard";
 import { SchemaViewer } from "./SchemaViewer";
@@ -19,8 +19,10 @@ type Props = {
   agentMessages: AgentMessageModel[];
   auditEvents: AuditEvent[];
   command: string;
+  compileActivity: string[];
   compiledToolGroup?: CompiledToolGroup;
   isExtension: boolean;
+  isCompilingWebsite: boolean;
   isLearning: boolean;
   isRunning: boolean;
   pendingApproval?: PendingApproval;
@@ -46,8 +48,10 @@ export function GraftPanel({
   agentMessages,
   auditEvents,
   command,
+  compileActivity,
   compiledToolGroup,
   isExtension,
+  isCompilingWebsite,
   isLearning,
   isRunning,
   pendingApproval,
@@ -69,6 +73,19 @@ export function GraftPanel({
   onUsePreset,
 }: Props) {
   const [compiledTab, setCompiledTab] = useState<"workflow" | "tools">("workflow");
+  const [compileActivityOpen, setCompileActivityOpen] = useState(false);
+  const showCompiledArea = isCompilingWebsite || compileActivity.length > 0 || Boolean(compiledToolGroup);
+
+  useEffect(() => {
+    if (isCompilingWebsite) {
+      setCompileActivityOpen(true);
+      return;
+    }
+
+    if (compiledToolGroup) {
+      setCompileActivityOpen(false);
+    }
+  }, [isCompilingWebsite, compiledToolGroup]);
 
   return (
     <aside className="graft-panel" aria-label="Graft Guard panel">
@@ -96,29 +113,58 @@ export function GraftPanel({
 
       {!isExtension && <AgentMessageStream messages={agentMessages} />}
 
-      {compiledToolGroup && (
+      {showCompiledArea && (
         <section className="panel-section">
           <div className="section-heading compiled-section-heading">
-            <div className="compiled-tabs" role="tablist" aria-label="Compiled output">
-              <button
-                type="button"
-                className={compiledTab === "workflow" ? "active" : ""}
-                onClick={() => setCompiledTab("workflow")}
-              >
-                Compiled workflow
-              </button>
-              <button
-                type="button"
-                className={compiledTab === "tools" ? "active" : ""}
-                onClick={() => setCompiledTab("tools")}
-              >
-                Generated tools
-              </button>
-            </div>
-            <span>{compiledToolGroup.provider === "agent-api" ? "Agent API" : "local fallback"}</span>
+            {compiledToolGroup ? (
+              <div className="compiled-tabs" role="tablist" aria-label="Compiled output">
+                <button
+                  type="button"
+                  className={compiledTab === "workflow" ? "active" : ""}
+                  onClick={() => setCompiledTab("workflow")}
+                >
+                  Compiled workflow
+                </button>
+                <button
+                  type="button"
+                  className={compiledTab === "tools" ? "active" : ""}
+                  onClick={() => setCompiledTab("tools")}
+                >
+                  Generated tools
+                </button>
+              </div>
+            ) : (
+              <h3>Compiled workflow</h3>
+            )}
+            <span>{compiledProviderLabel(isCompilingWebsite, compiledToolGroup)}</span>
           </div>
 
-          {compiledTab === "workflow" ? (
+          {compileActivity.length > 0 && (
+            <details
+              className="compile-activity"
+              open={compileActivityOpen}
+              onToggle={(event) => setCompileActivityOpen(event.currentTarget.open)}
+            >
+              <summary>
+                <span>{isCompilingWebsite ? "Agent is compiling" : "Agent compile log"}</span>
+                <small>{compileActivity.length} steps</small>
+              </summary>
+              <ol>
+                {compileActivity.map((event, index) => (
+                  <li key={`${event}-${index}`}>{event}</li>
+                ))}
+              </ol>
+            </details>
+          )}
+
+          {isCompilingWebsite && !compiledToolGroup && (
+            <div className="workflow-run-loading compile-loading">
+              <span className="loading-dot" aria-hidden="true" />
+              <span>{compileActivity[compileActivity.length - 1] ?? "Compiling this page into reusable tools."}</span>
+            </div>
+          )}
+
+          {compiledToolGroup && compiledTab === "workflow" ? (
             <div className="compiled-workflow-card">
               <strong>{compiledToolGroup.name}</strong>
               <span>{compiledToolGroup.description}</span>
@@ -134,7 +180,7 @@ export function GraftPanel({
                 </ol>
               </div>
             </div>
-          ) : (
+          ) : compiledToolGroup ? (
             <div className="compiled-workflow-card">
               <div className="compiled-workflow-group">
                 <h4>{compiledToolGroup.tools.length} typed tools</h4>
@@ -160,10 +206,19 @@ export function GraftPanel({
                   <span key={tool.name}>{tool.name}</span>
                 ))}
               </div>
+              {selectedSchema && (
+                <div className="generated-tool-schema">
+                  <div className="section-heading">
+                    <h4>Schema</h4>
+                    <span>MCP-compatible</span>
+                  </div>
+                  <SchemaViewer schema={selectedSchema} />
+                </div>
+              )}
             </div>
-          )}
+          ) : null}
 
-          {isExtension && (
+          {compiledToolGroup && isExtension && (
             <button
               type="button"
               className="primary-button full-width"
@@ -176,7 +231,7 @@ export function GraftPanel({
         </section>
       )}
 
-      {!compiledToolGroup && (
+      {!compiledToolGroup && (!isExtension || schemas.length > 0) && (
         <section className="panel-section">
           <div className="section-heading">
             <h3>Compiled tools</h3>
@@ -419,6 +474,21 @@ function runStatusLabel(
   }
 
   return `${eventCount} events`;
+}
+
+function compiledProviderLabel(
+  isCompilingWebsite: boolean,
+  compiledToolGroup: CompiledToolGroup | undefined,
+): string {
+  if (isCompilingWebsite) {
+    return "compiling";
+  }
+
+  if (!compiledToolGroup) {
+    return "not compiled";
+  }
+
+  return compiledToolGroup.provider === "agent-api" ? "Agent API" : "local fallback";
 }
 
 function inputTypeForProperty(property: unknown): string {

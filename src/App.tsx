@@ -17,7 +17,6 @@ import {
 import { createAuditEvent, type AuditEvent } from "./graft/auditLog";
 import {
   compileCapturedWorkflow,
-  loadPageSchemas,
   savePageSchema,
   type CandidateTool,
 } from "./graft/capturedWorkflowCompiler";
@@ -50,12 +49,14 @@ type PendingApproval = {
 };
 
 export default function App() {
-  const [schemas, setSchemas] = useState<ToolSchema[]>(() => loadCachedSchemas());
-  const [selectedToolName, setSelectedToolName] = useState("queryOrders");
+  const isExtension = isExtensionRuntime();
+  const [schemas, setSchemas] = useState<ToolSchema[]>(() => (isExtension ? [] : loadCachedSchemas()));
+  const [selectedToolName, setSelectedToolName] = useState(() => (isExtension ? "" : "queryOrders"));
   const [command, setCommand] = useState(presetCommand);
   const [websiteIntent, setWebsiteIntent] = useState(defaultWebsiteIntent);
   const [toolParams, setToolParams] = useState<Record<string, string>>({});
   const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([]);
+  const [compileActivity, setCompileActivity] = useState<string[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval>();
   const [replayTrace, setReplayTrace] = useState<ReplayTrace[]>([]);
@@ -74,7 +75,6 @@ export default function App() {
   const [candidateTool, setCandidateTool] = useState<CandidateTool>();
   const [isCapturing, setIsCapturing] = useState(false);
   const [inspectionError, setInspectionError] = useState<string>();
-  const isExtension = isExtensionRuntime();
 
   const selectedSchema = useMemo(
     () => schemas.find((schema) => schema.name === selectedToolName) ?? schemas[0],
@@ -111,9 +111,6 @@ export default function App() {
         }
 
         setPageSummary(summary);
-        const pageSchemas = loadPageSchemas(summary);
-        setSchemas(pageSchemas);
-        setSelectedToolName(pageSchemas[0]?.name ?? "queryOrders");
         addAgentMessage({ type: "page_observed", summary });
       } catch (error) {
         if (cancelled) {
@@ -135,6 +132,10 @@ export default function App() {
 
   function addAudit(event: Omit<AuditEvent, "id" | "timestamp">) {
     setAuditEvents((current) => [createAuditEvent(event), ...current]);
+  }
+
+  function addCompileActivity(message: string) {
+    setCompileActivity((current) => [...current, message]);
   }
 
   function addAgentMessage(event: AgentNarratorInput) {
@@ -215,9 +216,6 @@ export default function App() {
     try {
       const summary = await collectActivePageSummary();
       setPageSummary(summary);
-      const pageSchemas = loadPageSchemas(summary);
-      setSchemas(pageSchemas);
-      setSelectedToolName(pageSchemas[0]?.name ?? "queryOrders");
       addAgentMessage({ type: "page_observed", summary });
       addAudit({
         type: "learned_tool",
@@ -242,20 +240,32 @@ export default function App() {
     setInspectionError(undefined);
     setCandidateTool(undefined);
     setCompiledToolGroup(undefined);
+    setCompileActivity(["Inspecting the active page"]);
 
     try {
       const summary = await collectActivePageSummary();
       setPageSummary(summary);
       addAgentMessage({ type: "compile_started", summary });
+      addCompileActivity(`Observed ${summary.inputs.length} inputs, ${summary.buttons.length} buttons, and ${summary.tables.length} tables`);
+      addCompileActivity("Preparing AgentDraft request from prompt and page summary");
       await sleep(fakeCompileDelayMs);
+      addCompileActivity("Calling Agent Compiler and waiting for semantic draft");
 
       const effectiveIntent = websiteIntent.trim() || defaultWebsiteIntent;
       setCommand(effectiveIntent);
       const group = await compileToolGroupWithAgent({ prompt: effectiveIntent, pageSummary: summary });
+      addCompileActivity(
+        group.provider === "agent-api"
+          ? "Received AgentDraft from MiniMax API"
+          : "Used local compiler fallback",
+      );
+      addCompileActivity(`Normalized draft into ${group.tools.length} reusable tools`);
+      addCompileActivity(`Validated ${group.workflowPlan.length} planned workflow steps`);
       let savedTools = group.tools;
       for (const tool of group.tools) {
         savedTools = savePageSchema(summary, tool);
       }
+      addCompileActivity("Cached reusable tools for this page");
       setCompiledToolGroup(group);
       setSchemas(savedTools);
       setSelectedToolName(group.tools[0]?.name ?? "generatedTool");
@@ -269,6 +279,7 @@ export default function App() {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Website compile failed";
       setInspectionError(message);
+      addCompileActivity(`Compile failed: ${message}`);
       addAudit({
         type: "replay_failed",
         message,
@@ -722,7 +733,9 @@ export default function App() {
           agentMessages={agentMessages}
           auditEvents={auditEvents}
           command={command}
+          compileActivity={compileActivity}
           isExtension={isExtension}
+          isCompilingWebsite={isLearningWebsite}
           isLearning={isLearning}
           isRunning={isRunning}
           pendingApproval={pendingApproval}

@@ -748,6 +748,48 @@ textarea {
   font-weight: 700;
 }
 
+.compile-loading {
+  margin-bottom: 10px;
+}
+
+.compile-activity {
+  margin-bottom: 10px;
+  border: 1px solid #d7dde3;
+  border-radius: 8px;
+  background: #f7fafc;
+  padding: 9px 10px;
+}
+
+.compile-activity summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #253343;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.compile-activity summary small {
+  color: #718091;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.compile-activity ol {
+  display: grid;
+  gap: 6px;
+  margin: 9px 0 0;
+  padding-left: 18px;
+}
+
+.compile-activity li {
+  color: #405064;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .compiled-section-heading {
   align-items: center;
 }
@@ -914,6 +956,24 @@ textarea {
   padding: 2px 6px;
   font-size: 10px;
   text-transform: uppercase;
+}
+
+.generated-tool-schema {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  border-top: 1px solid #d4e3e8;
+  padding-top: 10px;
+}
+
+.generated-tool-schema .section-heading {
+  margin-bottom: 0;
+}
+
+.generated-tool-schema h4 {
+  margin: 0;
+  color: #253343;
+  font-size: 12px;
 }
 
 .payment-packet {
