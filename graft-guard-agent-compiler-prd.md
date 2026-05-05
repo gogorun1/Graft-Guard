@@ -38,6 +38,65 @@ Graft Guard runtime
   audit
 ```
 
+## Flexible Compiler Plan
+
+The compiler should not force the agent to emit final executable schemas. That makes the agent brittle and turns model variance into user-visible fallback. The long-term architecture is:
+
+```txt
+AgentDraft
+  free semantic interpretation of page, capabilities, risks, and workflow
+    ↓
+Tool IR
+  normalized reusable tools with stable names, risk levels, selectors, and arguments
+    ↓
+Executable Plan
+  click / setValue / extractTable / requestApproval primitives that the extension can run
+```
+
+### Plan
+
+1. Accept tolerant model output.
+   - Allow reasoning wrappers, markdown fences, and provider-specific JSON shapes.
+   - Extract the structured payload instead of rejecting the whole response.
+
+2. Ask the model for an `AgentDraft`, not final `ToolSchema`.
+   - The draft can describe capabilities, workflow steps, risks, and proposed tools in natural names.
+   - The model is allowed to say "search overdue invoices" or "export bank details"; the compiler maps that to internal tools.
+
+3. Normalize through a local compiler boundary.
+   - Convert agent capabilities into reusable tools.
+   - Convert workflow intent into a workflow plan that references those reusable tools.
+   - Convert sensitivity/destructive cues into Guard policy.
+
+4. Keep vendor payment as a first-class adapter.
+   - If the page matches Acme ERP invoices, normalize any agent draft into the four canonical reusable tools:
+     `searchInvoices`, `openInvoice`, `extractPaymentPacket`, `exportBankDetails`.
+   - This preserves the strong demo while still proving the agent generated the semantic draft.
+
+5. Add a generic app adapter.
+   - For unknown pages, infer a reusable tool from visible inputs, buttons, and tables.
+   - Use agent draft semantics for naming, description, workflow, and risk.
+   - Fall back to deterministic DOM heuristics only when the agent/proxy is unavailable.
+
+6. Keep tools separate from workflows.
+   - Generated tools are reusable per site/app.
+   - Compiled workflow is per prompt and can reuse existing tools.
+   - Workflow run is per execution and contains logs, Guard decisions, and outputs.
+
+7. Improve failure visibility.
+   - Fallback should include a reason in `riskNotes`.
+   - The UI can stay calm, but diagnostics should tell us whether failure came from network, parse, validation, or model semantics.
+
+### Implementation Slice
+
+The first implementation slice will:
+
+- change the MiniMax proxy prompt from strict final schema generation to flexible `AgentDraft` generation;
+- keep tolerant parsing for `<think>` and markdown-wrapped JSON;
+- normalize vendor payment drafts into canonical reusable tools;
+- add a generic DOM-based adapter for other websites;
+- let the extension call the agent compiler for any inspected website, not only Acme ERP invoices.
+
 ## User Story
 
 The user opens the standalone Acme ERP page, which should look like a plain legacy ERP app with no built-in Graft Guard sidebar.
