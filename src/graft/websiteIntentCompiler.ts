@@ -30,7 +30,7 @@ export function compileWebsiteIntent(intent: string, page: PageDomSummary): Cand
     }
     replayPlan.push({ type: "click", selector: submitButton.selector });
   } else {
-    warnings.push("No clear submit/action button was detected. Use Show me once for this page.");
+    warnings.push("No clear submit/action button was detected. Use Record actions for this page.");
   }
 
   if (risk === "read" && page.tables[0]) {
@@ -38,7 +38,7 @@ export function compileWebsiteIntent(intent: string, page: PageDomSummary): Cand
   }
 
   if (usableInputs.length === 0) {
-    warnings.push("No form inputs were detected. Use Show me once if the workflow is menu-driven.");
+    warnings.push("No form inputs were detected. Use Record actions if the workflow is menu-driven.");
   }
 
   return {

@@ -3,7 +3,6 @@ import type { CapturedStep, PageDomSummary } from "../extension/pageSummary";
 import type { AgentMessage as AgentMessageModel } from "../graft/agentNarrator";
 import { schemaSignature } from "../graft/schemaCompiler";
 import type { ToolSchema } from "../graft/schemaTypes";
-import { AgentMessageStream } from "./AgentMessageStream";
 
 type Props = {
   advancedOpen: boolean;
@@ -49,10 +48,18 @@ export function ExtensionInspector({
   onToggleAdvanced,
 }: Props) {
   const [compileMode, setCompileMode] = useState<"default" | "custom">("default");
+  const [customToolOpen, setCustomToolOpen] = useState(false);
   const hasWarnings = candidateWarnings.length > 0;
-  const showFallback = isCapturing || advancedOpen || hasWarnings || Boolean(error);
+  const showCustomTool = isCapturing || customToolOpen || hasWarnings || Boolean(error);
   const showAdvancedButton = advancedOpen || hasWarnings || Boolean(error) || Boolean(candidateSchema);
   const compileStatus = isLearningWebsite ? "compiling" : candidateSchema ? "compiled" : "idle";
+  const latestMessage = agentMessages[0]?.text;
+  const compileStatusText =
+    compileStatus === "compiling"
+      ? latestMessage ?? "Reading the page and drafting a tool schema."
+      : compileStatus === "compiled"
+        ? latestMessage ?? "Tool schema is ready to save."
+        : "Use the default goal or confirm a custom intent.";
 
   return (
     <section className="extension-inspector" aria-label="Compile website">
@@ -61,9 +68,7 @@ export function ExtensionInspector({
           <p>Graft Guard</p>
           <h2>Compile website tool</h2>
         </div>
-        <a className="api-plan-button" href="https://platform.minimax.io" target="_blank" rel="noreferrer">
-          MiniMax plan
-        </a>
+        <button type="button" className="api-plan-button">API plan</button>
       </header>
 
       <div className="section-heading">
@@ -71,18 +76,10 @@ export function ExtensionInspector({
         <span>{isExtension ? "workflow compiler" : "standalone demo"}</span>
       </div>
 
-      <AgentMessageStream messages={agentMessages} />
-
       <div className={`compile-status compile-status-${compileStatus}`}>
         {isLearningWebsite && <span className="loading-dot" aria-hidden="true" />}
         <strong>{compileStatus === "compiling" ? "Compiling" : compileStatus === "compiled" ? "Compiled" : "Ready to compile"}</strong>
-        <span>
-          {compileStatus === "compiling"
-            ? "Reading the page and drafting a tool schema."
-            : compileStatus === "compiled"
-              ? "Review the suggested tool, then save it."
-              : "Use the default goal or confirm a custom intent."}
-        </span>
+        <span>{compileStatusText}</span>
       </div>
 
       {summary && (
@@ -154,7 +151,7 @@ export function ExtensionInspector({
             </ul>
           )}
           {hasWarnings && (
-            <p className="fallback-hint">If this suggestion looks unstable, show Graft Guard the workflow once.</p>
+            <p className="fallback-hint">This suggestion may need a recorded action path.</p>
           )}
           <button type="button" className="primary-button full-width" onClick={onSaveSchema}>
             Save tool
@@ -178,15 +175,25 @@ export function ExtensionInspector({
 
       {error && <div className="error-state">{error}</div>}
 
-      {showFallback && (
-        <div className="show-once-card">
+      {!showCustomTool && (
+        <button type="button" className="custom-tool-toggle" onClick={() => setCustomToolOpen(true)}>
+          Customized tool
+        </button>
+      )}
+
+      {showCustomTool && (
+        <div className="custom-tool-card">
           <div>
-            <strong>{isCapturing ? "Recording your workflow..." : "Need a better suggestion?"}</strong>
-            <span>{isCapturing ? "Perform the workflow in the page, then click Done." : "Use a short demonstration as fallback."}</span>
+            <strong>{isCapturing ? "Recording actions" : "Customized tool"}</strong>
+            <span>
+              {isCapturing
+                ? "Use the website normally: fill the fields, select options, and click the final action. Come back here and click Done when the workflow is complete."
+                : "Record the exact actions for pages where automatic compile misses a menu, dynamic field, or custom control."}
+            </span>
           </div>
           {!isCapturing ? (
             <button type="button" className="secondary-button" onClick={onStartCapture} disabled={!isExtension}>
-              Show me once
+              Record actions
             </button>
           ) : (
             <button type="button" className="secondary-button active-capture" onClick={onStopCapture}>

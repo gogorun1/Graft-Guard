@@ -141,7 +141,7 @@ export function narrateAgentEvent(event: AgentNarratorEvent): AgentMessage | nul
       icon: "error",
       phase: "replay",
       text: "Replay failed. The page may have changed.",
-      detail: `${event.message} Try Show me once to recompile this workflow.`,
+      detail: `${event.message} Try Record actions to recompile this workflow.`,
     });
   }
 
