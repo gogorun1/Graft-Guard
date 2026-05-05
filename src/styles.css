@@ -1,0 +1,506 @@
+:root {
+  color: #17202a;
+  background: #d9dde2;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(640px, 1fr) 440px;
+  min-height: 100vh;
+}
+
+.erp-shell {
+  padding: 18px;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+    linear-gradient(#c6cdd4, #eef0f2 28%, #d3d9df);
+  background-size:
+    18px 18px,
+    auto;
+  color: #14202a;
+}
+
+.erp-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border: 2px solid #6e7883;
+  background: linear-gradient(#f5f7f8, #b9c1c9);
+  box-shadow: inset 0 1px #ffffff;
+}
+
+.erp-titlebar h1 {
+  margin: 0;
+  color: #0f2f57;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 26px;
+  letter-spacing: 0;
+}
+
+.erp-titlebar span {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: #4e5f6f;
+}
+
+.erp-led {
+  border: 1px solid #21652c;
+  background: #d4f7cb;
+  color: #174c1d;
+  font-family: "Courier New", monospace;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.erp-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid #7d8791;
+  background: #aeb7bf;
+}
+
+.erp-toolbar button,
+.erp-form button {
+  border: 1px solid #69727d;
+  border-radius: 2px;
+  background: linear-gradient(#ffffff, #c4cbd2);
+  color: #15202b;
+  font-weight: 700;
+  padding: 7px 12px;
+  box-shadow: inset 0 1px #ffffff;
+}
+
+.erp-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr)) auto auto;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #8b7353;
+  background: #f6f1d3;
+}
+
+.erp-form label {
+  display: grid;
+  gap: 4px;
+  color: #463b27;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.erp-form input {
+  width: 100%;
+  border: 1px solid #7b7b7b;
+  border-radius: 0;
+  background: #fffef7;
+  color: #111;
+  padding: 7px 8px;
+}
+
+.erp-form button {
+  align-self: end;
+  white-space: nowrap;
+}
+
+.erp-summary {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.erp-summary span {
+  border: 1px solid #808892;
+  background: #eef1f4;
+  padding: 6px 9px;
+  color: #2b3742;
+  font-family: "Courier New", monospace;
+  font-size: 13px;
+}
+
+.orders-table {
+  width: 100%;
+  margin-top: 12px;
+  border-collapse: collapse;
+  border: 2px solid #5e6873;
+  background: #ffffff;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.orders-table th,
+.orders-table td {
+  border: 1px solid #8d98a3;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.orders-table th {
+  background: #214a78;
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.orders-table tbody tr:nth-child(even) {
+  background: #eef4f8;
+}
+
+.status-pill {
+  display: inline-block;
+  min-width: 68px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  padding: 2px 6px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.status-paid {
+  color: #126533;
+  background: #dff5e6;
+}
+
+.status-pending {
+  color: #7a4f00;
+  background: #fff0bd;
+}
+
+.status-flagged {
+  color: #8c1616;
+  background: #ffe0e0;
+}
+
+.graft-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 100vh;
+  overflow: auto;
+  border-left: 1px solid #c4cad0;
+  background: #fbfcfd;
+  color: #18232f;
+}
+
+.panel-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+  border-bottom: 1px solid #dce1e5;
+  background: #ffffff;
+}
+
+.panel-header p {
+  margin: 0 0 2px;
+  color: #607080;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: 0;
+}
+
+.mode-badge {
+  align-self: start;
+  border: 1px solid #b8c7d4;
+  border-radius: 6px;
+  background: #eaf3fb;
+  color: #194563;
+  padding: 4px 7px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.panel-section {
+  padding: 16px 18px;
+  border-bottom: 1px solid #e2e6ea;
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.section-heading h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.section-heading span {
+  color: #6a7887;
+  font-size: 12px;
+}
+
+.primary-button,
+.secondary-button {
+  min-height: 38px;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-weight: 800;
+}
+
+.primary-button {
+  border: 1px solid #135a70;
+  background: #126b82;
+  color: #ffffff;
+}
+
+.primary-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.secondary-button {
+  border: 1px solid #c4ccd4;
+  background: #ffffff;
+  color: #24313e;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.tool-list {
+  display: grid;
+  gap: 8px;
+}
+
+.tool-list button {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid #d7dde3;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1b2836;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.tool-list button.selected {
+  border-color: #126b82;
+  background: #eef9fb;
+}
+
+.tool-list small {
+  color: #607080;
+  font-weight: 800;
+}
+
+.schema-viewer code,
+.approval-card code {
+  display: block;
+  overflow-x: auto;
+  border: 1px solid #d8e0e7;
+  border-radius: 6px;
+  background: #f4f7f9;
+  color: #183247;
+  padding: 8px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+}
+
+.schema-viewer pre {
+  overflow: auto;
+  max-height: 220px;
+  margin: 8px 0 0;
+  border: 1px solid #dde3e8;
+  border-radius: 6px;
+  background: #101820;
+  color: #e3eef6;
+  padding: 10px;
+  font-size: 11px;
+}
+
+textarea {
+  width: 100%;
+  min-height: 78px;
+  resize: vertical;
+  border: 1px solid #c5ced6;
+  border-radius: 6px;
+  color: #162331;
+  padding: 10px;
+}
+
+.button-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.approval-card {
+  margin: 14px 18px;
+  border: 1px solid #c6a03d;
+  border-radius: 8px;
+  background: #fff8df;
+  padding: 14px;
+}
+
+.approval-export {
+  border-color: #b4532d;
+  background: #fff0e9;
+}
+
+.approval-eyebrow {
+  color: #8a5d00;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.approval-card h3 {
+  margin: 4px 0 8px;
+  font-size: 16px;
+}
+
+.approval-card p {
+  margin: 8px 0;
+  color: #3a3120;
+}
+
+.approval-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.trace-list,
+.audit-timeline {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.trace-list li {
+  margin: 5px 0;
+  color: #263544;
+  font-size: 13px;
+}
+
+.result-box {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+  border: 1px solid #cbd8df;
+  border-radius: 6px;
+  background: #f0faf5;
+  padding: 10px;
+  font-size: 13px;
+}
+
+.audit-section {
+  flex: 1;
+}
+
+.audit-timeline {
+  display: grid;
+  gap: 8px;
+}
+
+.audit-timeline li {
+  display: grid;
+  gap: 2px;
+  border-left: 3px solid #126b82;
+  padding-left: 9px;
+}
+
+.audit-timeline time {
+  color: #6b7987;
+  font-size: 11px;
+}
+
+.audit-timeline span {
+  font-size: 13px;
+}
+
+.audit-timeline small {
+  color: #7b8793;
+  font-size: 11px;
+}
+
+.empty-state {
+  border: 1px dashed #c9d2db;
+  border-radius: 6px;
+  color: #667585;
+  padding: 10px;
+  font-size: 13px;
+}
+
+@media (max-width: 1080px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .graft-panel {
+    max-height: none;
+    border-left: 0;
+    border-top: 1px solid #c4cad0;
+  }
+
+  .erp-form {
+    grid-template-columns: repeat(2, minmax(130px, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .erp-shell {
+    padding: 10px;
+  }
+
+  .erp-titlebar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .erp-titlebar h1 {
+    font-size: 21px;
+  }
+
+  .erp-form {
+    grid-template-columns: 1fr;
+  }
+
+  .orders-table {
+    display: block;
+    overflow-x: auto;
+  }
+}
