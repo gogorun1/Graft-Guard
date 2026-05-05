@@ -900,17 +900,71 @@ textarea {
   font-weight: 800;
 }
 
-.compile-activity ol {
+.compile-activity-list {
   display: grid;
-  gap: 6px;
-  margin: 9px 0 0;
-  padding-left: 18px;
+  gap: 7px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
 }
 
-.compile-activity li {
+.compile-activity-list li {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 8px;
+  align-items: start;
+  border: 1px solid transparent;
+  border-radius: 7px;
   color: #405064;
+  padding: 6px 7px;
   font-size: 12px;
   font-weight: 700;
+  line-height: 1.35;
+  animation: compile-step-reveal 220ms ease-out;
+}
+
+.compile-activity-list li.active {
+  border-color: #9fd0dc;
+  background: #fff;
+  color: #1d3d4d;
+  box-shadow: 0 6px 16px rgba(18, 107, 130, 0.12);
+}
+
+.compile-activity-list li.complete {
+  color: #526273;
+}
+
+.compile-step-marker {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-top: 4px;
+  border: 2px solid #9fb0bd;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.compile-activity-list li.active .compile-step-marker {
+  border-color: #126b82;
+  background: #126b82;
+  box-shadow: 0 0 0 4px rgba(18, 107, 130, 0.13);
+}
+
+.compile-activity-list li.complete .compile-step-marker {
+  border-color: #2d8a5f;
+  background: #2d8a5f;
+}
+
+@keyframes compile-step-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .compiled-section-heading {
